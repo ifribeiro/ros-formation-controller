@@ -5,6 +5,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
 from turtlesim.msg import Pose
+from geometry_msgs.msg import Twist
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,21 +19,29 @@ class Estimator:
     def __init__(self):
         self.rospy=rospy
         self.rospy.init_node('listener',anonymous=True)
-        self.rospy.loginfo("Starting Leg Laser") #" starting controle de formacao de drones"
-        # self.initParameters()
-        self.initSubscribers() # topicos a serem subscritos por ex odometria
+        self.rospy.loginfo("Starting Formation Controller") #" starting controle de formacao de drones"
+        # self.initParameters()        
         self.initvariables() # inicializacao de variaveis
-        self.change=False #label para indicar mudanca de variaveis
-        self.takeOff('bebop1')
+        self.initSubscribers() # topicos a serem subscritos por ex odometria
+        self.initPublishers(self.bebop1_name)
+        self.change=False #label para indicar mudanca de variaveis        
         self.run()  # loop de controle
 
     def initSubscribers(self):
         self.subPose = self.rospy.Subscriber("/scan", LaserScan, self.getlaser) # topico subscrito --> tipo de mensagem que o topico manda -->
         # --> metodo que vai atualizar dados da mensagem para atributos do objeto
-        self.subvel = self.rospy.Subscriber("/turtle1/pose", Pose, self.get_robot_velocity)
+        #self.subvel = self.rospy.Subscriber("/turtle1/pose", Pose, self.get_robot_velocity)
+        self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
         return
+    def initPublishers(self, bebop1_name):
+        self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
+        return 
+
     def initvariables(self):
-        self.rate = self.rospy.Rate(100)
+        self.bebop1_name = 'bebop1'
+        self.rate = self.rospy.Rate(200)
+        self.Xd = [5,5,5,0]
+        self.x = [0,0,0,0]
         self.angle_min = 0
         self.angle_max = 0
         self.scan_time = 0
@@ -42,6 +51,7 @@ class Estimator:
         self.range_min = 0
         self.range_max = 0
         self.change = False
+        self.altitudeChanged = False
         self.robot_linear_vel=0
         #wflc
 
@@ -64,10 +74,10 @@ class Estimator:
         self.count=0
         self.count_vec=[]
         self.R_leg_pose=[]
-        self.L_leg_pose=[]
-        self.LDD_vector=[]
-        # self.Gait_Candence_vector=[]self.angle_min = 0
-        self.angle_max = 0
+        self.L_1000leg_pose=[]
+        self.LD1000D_vector=[]
+        # self.1000Gait_Candence_vector=[]self.angle_min = 0
+        self.an1000gle_max = 0
         self.scan_time = 0
         self.ranges = 0
         self.Gait_Amplitude_vector=[]
@@ -100,6 +110,14 @@ class Estimator:
         self.intensities = msg.intensities
         self.change=True
 
+    def get_drone_odom(self, msg):
+
+        x = msg.pose.pose.position.x
+        z = msg.pose.pose.position.z
+        self.x[0] = x
+        self.x[2] = z
+        self.change=True
+        return
 
     # def wflc(self,y, mu_0, mu_1, mu_b,omega_0, M):
     #     self.X[0]=math.sin(M*self.sum_omega_0)
@@ -126,8 +144,12 @@ class Estimator:
 
     #     return 
     def takeOff(self, drone_name):
-        self.rospy.Publisher("/%s/takeOff"%(drone_name), Empty)
-        return 
+        pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
+        rate_10 = self.rospy.Rate(10) # 10hz
+        for i in range(1,25):
+            pub.publish(Empty())
+            rate_10.sleep()
+        return True
         
 
 
@@ -215,7 +237,7 @@ class Estimator:
                 for i in range(0,len(labels)):
                     if(labels[i]==0):
                         n1=n1+1
-                        x_n1=x_n1+self.cart[i,0]
+                        #x_n1%(drone_name)=x_n1+self.cart[i,0]
                         y_n1=y_n1+self.cart[i,1]
                     else:
                         n2=n2+1
@@ -257,10 +279,26 @@ class Estimator:
             return 
 
 
-    def run(self):
-        while not self.rospy.is_shutdown():
-            print (self.robot_linear_vel)
+    def run(self):        
 
+        #a execução espera o comando de takeoff finalizar
+        self.takeOff(self.bebop1_name)  
+        
+        vel_msg = Twist()
+
+        vel_msg.linear.x = 0
+        vel_msg.linear.y = 0
+        vel_msg.linear.z = 0.2
+        vel_msg.angular.x = 0
+        vel_msg.angular.y = 0
+        vel_msg.angular.z = 0
+        while not self.rospy.is_shutdown():
+            self.pubVel.publish(vel_msg)
+            if (self.change):
+                print (self.x)
+            
+            self.change=False
+            self.rate.sleep()
 
         """
         self.fig = plt.figure(figsize=(18,10))
@@ -354,7 +392,6 @@ class Estimator:
                # plt.clf()
         """
                 
-        self.rate.sleep()
     
 if __name__ == '__main__':
     try:
