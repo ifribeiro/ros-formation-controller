@@ -15,7 +15,7 @@ import math
 from numpy import argmax, mean, diff, log, nonzero
 
 
-class Estimator:
+class Controller:
     def __init__(self):
         self.rospy=rospy
         self.rospy.init_node('listener',anonymous=True)
@@ -35,62 +35,49 @@ class Estimator:
     def initPublishers(self, bebop1_name):
         self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
         return 
+    def initTimeArray(self, start_time, end_time):
+        np.range()
 
     def initvariables(self):
         self.bebop1_name = 'bebop1'
         self.rate = self.rospy.Rate(200)
-        self.Xd = [5,5,5,0]
-        self.x = [0,0,0,0]
-        self.angle_min = 0
-        self.angle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.angle_increment = 0
-        self.time_increment = 0
-        self.range_min = 0
-        self.range_max = 0
-        self.change = False
-        self.altitudeChanged = False
-        self.robot_linear_vel=0
-        #wflc
+        self.Xd = np.transpose([[5, 5, 5, 0]])    
+        self.ti = 0.1
+        self.t = np.arange(0, 20, self.ti)
 
-        self.omega_0_init = 1
+        #Formação desejada
+        self.qdes = np.transpose([[2, 1, 1.5, 1, 0, 0]])
 
-        # self.sum_rec = 0
-        # self.sum_omega_0 = 0
-        # self.harmonics = 0
-        # self.tremor = 0            
-        self.mu_0 = 2*10**(-6)
-        self.mu_1 =  1.5*10**(-3)
-        self.mu_b = 0
-        self.M=1
-        #fle
-        self.mu=0.0018
-        self.sum_omega=0
-        self.harmonics_flc=0
-        self.noise_estimate_flc=np.zeros(2)
-        
-        self.count=0
-        self.count_vec=[]
-        self.R_leg_pose=[]
-        self.L_1000leg_pose=[]
-        self.LD1000D_vector=[]
-        # self.1000Gait_Candence_vector=[]self.angle_min = 0
-        self.an1000gle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.Gait_Amplitude_vector=[]
-        self.angle_min = 0
-        self.angle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.angle_min = 0
-        self.angle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.Estimated_Human_Linear_Velocity=[]
-        self.Robot_Linear_velocity=[]
-        self.Gait_Candence_vector=[]
+        #ks
+        self.k1 = 5
+        self.k2 = 0.3
+        self.k3 = 5.5
+        self.k4 = 0.2
+        self.k5 = 0.55
+        self.k6 = 0.7
+        self.k7 = 1.45
+        self.k8 = 0.7        
+
+        #kps
+        self.kpx = 3
+        self.kpy = 3
+        self.kpz = 0.5
+        self.kpphi = 3
+        self.kdx = 2
+        self.kdy = 2.5
+        self.kdz = 2
+        self.kdphi = 0.5
+        #kp
+        self.kp = np.diag([self.kpx, self.kpy, self.kpz, self.kpphi])
+        self.kd = np.diag([self.kdx, self.kdy, self.kdz, self.kdphi])
+
+        #Condições iniciais
+        self.x = -2*np.ones((len(self.t), 1))
+        self.y = np.ones((len(self.t),1))
+        self.z = np.ones((len(self.t),1))
+        self.phi = np.zeros((len(self.t),1))
+        self.U = {}
+        self.ganho = 0.4
 
     def get_robot_velocity(self,msg):
         robot_linear_vel = msg
@@ -104,31 +91,6 @@ class Estimator:
         self.x[2] = z
         self.change=True
         return
-
-    # def wflc(self,y, mu_0, mu_1, mu_b,omega_0, M):
-    #     self.X[0]=math.sin(M*self.sum_omega_0)
-    #     self.X[1]=math.cos(M*self.sum_omega_0)
-        
-    #     error=y-(M*(np.dot(self.W.T, self.X)))-mu_b
-    #     #print(error)
-    #     self.sum_rec=self.sum_rec+M*(self.W[0]*self.X[M])-(self.W[M]*self.X[0])
-    #    # print(self.sum_rec)
-
-    #     omega_0_pred = self.omega_0 + (2*mu_0*error*self.sum_rec)
-    #     w_pred = self.W + (2*mu_1*error*self.X)
-
-    #     self.omega_0 = omega_0_pred
-    #     self.W = w_pred
-    #     self.sum_omega_0 = self.sum_omega_0+omega_0_pred
-
-    #     #outputs
-    #     self.Omega_0_Hz = self.omega_0/(2*math.pi)/self.T
-    #     self.harmonics_wlfc = np.multiply(self.W,self.X)
-    #     self.tremor_wflc = np.sum(self.harmonics_wlfc)
-
-    #     self.Gait_Candence_vector.append(self.Omega_0_Hz)
-
-    #     return 
     def takeOff(self, drone_name):
         pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
         rate_10 = self.rospy.Rate(10) # 10hz
@@ -136,11 +98,12 @@ class Estimator:
             pub.publish(Empty())
             rate_10.sleep()
         return True
+
     def run(self):        
 
         #a execução espera o comando de takeoff finalizar
-        self.takeOff(self.bebop1_name)  
-        
+        #self.takeOff(self.bebop1_name)  
+        #print(self.t)
         vel_msg = Twist()
 
         vel_msg.linear.x = 0
@@ -149,6 +112,33 @@ class Estimator:
         vel_msg.angular.x = 0
         vel_msg.angular.y = 0
         vel_msg.angular.z = 0
+
+        for i in range(1,len(self.t)):
+            X = np.transpose([[self.x[i], self.y[i], self.z[i], self.phi[i]]])
+            Xtil = self.Xd-X
+            f1 = [
+                [(self.k1)*(math.cos(self.phi[i])),(-self.k3)*(math.sin(self.phi[i])), 0, 0],
+                [(self.k1)*math.sin(self.phi[i]), self.k3*math.cos(self.phi[i]), 0, 0],
+                [0, 0, self.k5, 0],
+                [0, 0, 0, self.k7]]
+            part1 = np.linalg.inv(f1)
+            part2 = self.Xd*self.ti
+            part5 = self.kd.dot(Xtil)
+            tanhs = np.transpose([np.array([math.tanh(xi) for xi in part5])])
+            print ("->>>>")        
+            part3 = self.kp.dot(tanhs)
+            part4 = part2+part3
+
+            self.U[i] = ((part1).dot(part2 + part3))*self.ganho
+
+            print (self.U[1][1][0])
+            break
+            print("teste")
+            
+
+
+
+
         while not self.rospy.is_shutdown():
             self.pubVel.publish(vel_msg)
             if (self.change):
@@ -156,6 +146,7 @@ class Estimator:
             
             self.change=False
             self.rate.sleep()
+            break
 
         """
         self.fig = plt.figure(figsize=(18,10))
@@ -252,7 +243,6 @@ class Estimator:
     
 if __name__ == '__main__':
     try:
-        Estimator = Estimator()
+        Controller = Controller()
     except rospy.ROSInterruptException:
         pass
-

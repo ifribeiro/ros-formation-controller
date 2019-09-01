@@ -30,17 +30,20 @@ class Estimator:
     def initSubscribers(self):
         # --> metodo que vai atualizar dados da mensagem para atributos do objeto
         #self.subvel = self.rospy.Subscriber("/turtle1/pose", Pose, self.get_robot_velocity)
-        self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
+        self.subOdom = self.rospy.Subscriber('/turtle1/pose', Pose, self.get_robot_velocity)
+        #self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
         return
     def initPublishers(self, bebop1_name):
-        self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
+        #self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
+        self.pubVel = rospy.Publisher('/turtle1/cmd_vel', Twist, queue_size=10)
         return 
 
     def initvariables(self):
         self.bebop1_name = 'bebop1'
-        self.rate = self.rospy.Rate(200)
-        self.Xd = [5,5,5,0]
+        self.rate = self.rospy.Rate(10)
+        self.Xd = [4,4,4,4]
         self.x = [0,0,0,0]
+        self.robot_linear_vel = (0,0,0)
         self.angle_min = 0
         self.angle_max = 0
         self.scan_time = 0
@@ -51,7 +54,6 @@ class Estimator:
         self.range_max = 0
         self.change = False
         self.altitudeChanged = False
-        self.robot_linear_vel=0
         #wflc
 
         self.omega_0_init = 1
@@ -93,9 +95,13 @@ class Estimator:
         self.Gait_Candence_vector=[]
 
     def get_robot_velocity(self,msg):
+        old_linear_vel = self.robot_linear_vel
         robot_linear_vel = msg
         self.robot_linear_vel = (robot_linear_vel.x, robot_linear_vel.y, robot_linear_vel.theta)
+        if(old_linear_vel != self.robot_linear_vel):
+            self.change = True        
         return
+
     def get_drone_odom(self, msg):
 
         x = msg.pose.pose.position.x
@@ -139,20 +145,24 @@ class Estimator:
     def run(self):        
 
         #a execução espera o comando de takeoff finalizar
-        self.takeOff(self.bebop1_name)  
+        #self.takeOff(self.bebop1_name)  
         
         vel_msg = Twist()
 
-        vel_msg.linear.x = 0
-        vel_msg.linear.y = 0
-        vel_msg.linear.z = 0.2
-        vel_msg.angular.x = 0
-        vel_msg.angular.y = 0
-        vel_msg.angular.z = 0
+        vel_msg.linear.x = -0.1
+        #vel_msg.linear.y = 0
+        #vel_msg.linear.z = 0.2
+        #vel_msg.angular.x = 0
+        #vel_msg.angular.y = 0
+        #vel_msg.angular.z = 0
         while not self.rospy.is_shutdown():
+            xTil = self.Xd[0]-self.robot_linear_vel[0]
+            yTil = self.Xd[1]-self.robot_linear_vel[1]
+            rho = math.sqrt(xTil**2+yTil**2)
+            theta = math.atan2(yTil,xTil)
             self.pubVel.publish(vel_msg)
             if (self.change):
-                print (self.x)
+                print ("xtil: ",np.round(xTil),"ytil: ",np.round(yTil), "rho: ",np.round(rho), "theta: ",np.round(theta))
             
             self.change=False
             self.rate.sleep()
