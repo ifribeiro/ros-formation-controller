@@ -6,6 +6,10 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
 from turtlesim.msg import Pose
 from geometry_msgs.msg import Twist
+
+import matplotlib as mpl
+from mpl_toolkits.mplot3d import Axes3D
+
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -43,7 +47,8 @@ class Controller:
         self.rate = self.rospy.Rate(200)
         self.Xd = np.transpose([[5, 5, 5, 0]])    
         self.ti = 0.1
-        self.t = np.arange(0, 20, self.ti)
+        self.tfinal = 100
+        self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
         self.qdes = np.transpose([[2, 1, 1.5, 1, 0, 0]])
@@ -73,11 +78,11 @@ class Controller:
 
         #Condições iniciais
         self.x = -2*np.ones((len(self.t), 1))
-        self.y = np.ones((len(self.t),1))
-        self.z = np.ones((len(self.t),1))
+        self.y = 2*np.ones((len(self.t),1))
+        self.z = 2*np.ones((len(self.t),1))
         self.phi = np.zeros((len(self.t),1))
         self.U = {}
-        self.ganho = 0.4
+        self.ganho = 0.2
 
     def get_robot_velocity(self,msg):
         robot_linear_vel = msg
@@ -113,7 +118,7 @@ class Controller:
         vel_msg.angular.y = 0
         vel_msg.angular.z = 0
 
-        for i in range(1,len(self.t)):
+        for i in range(0,len(self.t)-1):
             X = np.transpose([[self.x[i], self.y[i], self.z[i], self.phi[i]]])
             Xtil = self.Xd-X
             f1 = [
@@ -127,18 +132,31 @@ class Controller:
             tanhs = np.transpose([np.array([math.tanh(xi) for xi in part5])])
             print ("->>>>")        
             part3 = self.kp.dot(tanhs)
-            part4 = part2+part3
 
             self.U[i] = ((part1).dot(part2 + part3))*self.ganho
 
-            print (self.U[1][1][0])
-            break
-            print("teste")
+
+            #Define a nova posicão do drone1
+            self.x[i+1] = self.x[i]+self.ti*self.U[i][0][0]
+            self.y[i+1] = self.y[i]+self.ti*self.U[i][1][0]
+            self.z[i+1] = self.z[i]+self.ti*self.U[i][2][0]
+            self.phi[i+1] = self.phi[i]+self.ti*self.U[i][3][0]
             
+            #print (self.x[i+1], ",", self.y[i+1], ",", self.z[i+1], self.phi[i+1])       
+
+
+        mpl.rcParams['legend.fontsize'] = 10
+        fig = plt.figure()
+        ax = Axes3D(plt.gcf())
+
+        ax.plot(self.x[:,0],self.y[:,0],self.z[:,0])
+        plt.show()
+        
+    
 
 
 
-
+        
         while not self.rospy.is_shutdown():
             self.pubVel.publish(vel_msg)
             if (self.change):
