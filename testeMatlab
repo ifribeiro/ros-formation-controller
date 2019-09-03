@@ -1,0 +1,67 @@
+Hyperbolic Tangent of Vector
+Create a vector and calculate the hyperbolic tangent of each value.
+k1 = 5;
+k2 = 0.3;
+k3 = 5.5;
+k4 = 0.2;
+k5 = 0.55;
+k6 = 0.7;
+k7 = 1.45;
+k8 = 0.7;
+
+kpx = 3;
+kpy = 3;
+kpz = 0.5;
+kpphi = 3;
+kdx = 2;
+kdy = 2.5;
+kdz = 2;
+kdphi = 0.5;
+
+
+
+%kp
+kp = diag([kpx kpy kpz kpphi]);
+%kd
+kd = diag([kdx kdy kdz kdphi]);
+
+Xd = transpose([2 1 1.5 0]);
+
+x(1) = 0;
+y(1) = 0;
+z(1) = 0.75;
+phi(1) = 0;
+i=1
+X = transpose([x(1) y(1) z(1) phi(1)]);    
+Xtio = Xd - X;
+
+f1 = [k1*cos(phi(1)) -k3*sin(phi(i)) 0 0;...
+          k1*sin(phi(i)) k3*cos(phi(i)) 0 0;...
+          0 0 k5 0;...
+          0 0 0 k7];
+inv_f1 = f1^-1;
+kd_xtil = kd*Xtio
+disp(kd_xtil)
+tanh_kd = tanh(kd_xtil)
+disp(tanh_kd)
+kp_tanh = kp*(tanh_kd)
+disp(kp_tanh)
+xd_x_to = Xd*0.1
+disp(xd_x_to)
+
+xd_kp = xd_x_to + kp_tanh
+disp(xd_kp)
+
+
+part1 = (inv_f1)*(xd_kp)
+disp(part1)
+
+U{1} = (part1)*0.5;
+
+x(i+1) = x(i)+0.1*U{i}(1);
+y(i+1) = y(i)+0.1*U{i}(2);
+z(i+1) = z(i)+0.1*U{i}(3);
+
+disp(x(2))
+disp(y(2))
+disp(z(2))

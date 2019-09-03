@@ -45,9 +45,10 @@ class Controller:
     def initvariables(self):
         self.bebop1_name = 'bebop1'
         self.rate = self.rospy.Rate(200)
-        self.Xd = np.transpose([[5, 5, 5, 0]])    
+        self.Xd = np.transpose([[2, 1, 1.5, 0]])   
+        
         self.ti = 0.1
-        self.tfinal = 100
+        self.tfinal = 20
         self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
@@ -77,12 +78,12 @@ class Controller:
         self.kd = np.diag([self.kdx, self.kdy, self.kdz, self.kdphi])
 
         #Condições iniciais
-        self.x = -2*np.ones((len(self.t), 1))
-        self.y = 2*np.ones((len(self.t),1))
-        self.z = 2*np.ones((len(self.t),1))
+        self.x = np.zeros((len(self.t), 1))
+        self.y = np.zeros((len(self.t),1))
+        self.z = 0.75*np.ones((len(self.t),1))
         self.phi = np.zeros((len(self.t),1))
         self.U = {}
-        self.ganho = 0.2
+        self.ganho = 0.5
 
     def get_robot_velocity(self,msg):
         robot_linear_vel = msg
@@ -120,31 +121,44 @@ class Controller:
 
         for i in range(0,len(self.t)-1):
             X = np.transpose([[self.x[i], self.y[i], self.z[i], self.phi[i]]])
-            Xtil = self.Xd-X
+            Xtil = self.Xd - X
             f1 = [
                 [(self.k1)*(math.cos(self.phi[i])),(-self.k3)*(math.sin(self.phi[i])), 0, 0],
                 [(self.k1)*math.sin(self.phi[i]), self.k3*math.cos(self.phi[i]), 0, 0],
                 [0, 0, self.k5, 0],
                 [0, 0, 0, self.k7]]
-            part1 = np.linalg.inv(f1)
-            part2 = self.Xd*self.ti
-            part5 = self.kd.dot(Xtil)
-            tanhs = np.transpose([np.array([math.tanh(xi) for xi in part5])])
-            print ("->>>>")        
-            part3 = self.kp.dot(tanhs)
+            f1_inv = np.linalg.inv(f1)
+            #print ("f1-1", f1_inv)
+            xd_x_to = self.Xd*self.ti
+            print ("xd*xto \n", xd_x_to)
 
-            self.U[i] = ((part1).dot(part2 + part3))*self.ganho
+            kd_Xtil = self.kd.dot(Xtil)
 
+            print ("kd_Xtil \n", kd_Xtil)
 
+            tanh_kd_Xtil = np.transpose([np.array([math.tanh(xi) for xi in kd_Xtil])])
+            print("tanh_kd_Xtil \n",tanh_kd_Xtil)
+                    
+            part3 = self.kp.dot(tanh_kd_Xtil)
+
+            print("kp*tanh_kd_til \n", part3)
+            
+            xd_kp = xd_x_to + part3
+            #print ("part1 \n", f1_inv_x_xd.diagonal()) 
+            print ("xd_x_to + part3 \n", xd_kp)
+            f1_inv_x_xd = (f1_inv).dot(xd_kp)
+
+            print ("f1_inv_x_xd \n", f1_inv_x_xd) 
+            self.U[i] = ((f1_inv).dot(xd_kp))*self.ganho
+
+            print (self.U[i][0][0], self.U[i][1][0], self.U[i][2][0])
             #Define a nova posicão do drone1
             self.x[i+1] = self.x[i]+self.ti*self.U[i][0][0]
             self.y[i+1] = self.y[i]+self.ti*self.U[i][1][0]
             self.z[i+1] = self.z[i]+self.ti*self.U[i][2][0]
             self.phi[i+1] = self.phi[i]+self.ti*self.U[i][3][0]
             
-            #print (self.x[i+1], ",", self.y[i+1], ",", self.z[i+1], self.phi[i+1])       
-
-
+            print (self.x[i+1], ",", self.y[i+1], ",", self.z[i+1], self.phi[i+1])       
         mpl.rcParams['legend.fontsize'] = 10
         fig = plt.figure()
         ax = Axes3D(plt.gcf())
