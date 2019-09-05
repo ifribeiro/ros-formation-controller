@@ -34,10 +34,14 @@ class Controller:
     def initSubscribers(self):
         # --> metodo que vai atualizar dados da mensagem para atributos do objeto
         #self.subvel = self.rospy.Subscriber("/turtle1/pose", Pose, self.get_robot_velocity)
-        self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
+        #self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
+        self.subTurtle = self.rospy.Subscriber('/%s/pose'%("turtle1"), Pose, self.get_turtle_odom)
         return
     def initPublishers(self, bebop1_name):
-        self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
+        #self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
+
+        self.pubVel2 = rospy.Publisher('turtle1/cmd_vel', Twist, queue_size=10)
+
         return 
     def initTimeArray(self, start_time, end_time):
         np.range()
@@ -45,14 +49,18 @@ class Controller:
     def initvariables(self):
         self.bebop1_name = 'bebop1'
         self.rate = self.rospy.Rate(200)
-        self.Xd = np.transpose([[2, 1, 1.5, 0]])   
+        #self.Xd = np.transpose([[2, 1, 1.5, 0]])   
+        self.Xd = np.transpose([[8, 5.54, 0, 0]])
         
         self.ti = 0.1
-        self.tfinal = 20
+        self.tfinal = 10
         self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
-        self.qdes = np.transpose([[2, 1, 1.5, 1, 0, 0]])
+        #self.qdes = np.transpose([[2, 1, 1.5, 1, 0, 0]])
+        self.qdes = np.transpose([[8, 5.54, 0, 1, 0, 0]])
+        
+        self.qtil = np.zeros((6, len(self.t)))
 
         #ks
         self.k1 = 5
@@ -78,25 +86,48 @@ class Controller:
         self.kd = np.diag([self.kdx, self.kdy, self.kdz, self.kdphi])
 
         #Condições iniciais
-        self.x = np.zeros((len(self.t), 1))
-        self.y = np.zeros((len(self.t),1))
-        self.z = 0.75*np.ones((len(self.t),1))
+        self.x = 5.54*np.ones((len(self.t), 1))
+        self.y = 5.54*np.ones((len(self.t),1))
+        self.z = 0*np.ones((len(self.t),1))
         self.phi = np.zeros((len(self.t),1))
         self.U = {}
         self.ganho = 0.5
+
+        self.odom_drone = (5.54, 5.54, 0, 0)
+        self.old_odom_drone = (0,0,0,0)
+
+        self.a=0.2
+        self.v = {}
+        self.odomx = 5.54*np.ones(len(self.t)-1)
+        self.odomy = 5.54*np.zeros(len(self.t)-1)
+
 
     def get_robot_velocity(self,msg):
         robot_linear_vel = msg
         self.robot_linear_vel = (robot_linear_vel.x, robot_linear_vel.y, robot_linear_vel.theta)
         return
     def get_drone_odom(self, msg):
+        
+        self.old_odom_drone = self.odom_drone
 
         x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
-        self.x[0] = x
-        self.x[2] = z
-        self.change=True
+        psi = msg.twist.twist.angular.z
+
+        #atualiza o valor da odometria
+        self.odom_drone = (x, y, z, psi)
+
+        #verifica se a odometria mudou
+        if(self.old_odom_drone != self.odom_drone):
+            self.change = True
         return
+
+    def get_turtle_odom(self, msg):
+        x = msg.x
+        y = msg.y
+        self.odom_drone = (x, y, 0, 0.0)
+
     def takeOff(self, drone_name):
         pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
         rate_10 = self.rospy.Rate(10) # 10hz
@@ -112,15 +143,11 @@ class Controller:
         #print(self.t)
         vel_msg = Twist()
 
-        vel_msg.linear.x = 0
-        vel_msg.linear.y = 0
-        vel_msg.linear.z = 0.2
-        vel_msg.angular.x = 0
-        vel_msg.angular.y = 0
-        vel_msg.angular.z = 0
-
         for i in range(0,len(self.t)-1):
-            X = np.transpose([[self.x[i], self.y[i], self.z[i], self.phi[i]]])
+            X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])
+            self.odomx[i] = self.odom_drone[0]
+            self.odomy[i] = self.odom_drone[1]
+            #X = np.transpose([[self.x[i] , self.y[i], self.z[i], self.phi[i]]])
             Xtil = self.Xd - X
             f1 = [
                 [(self.k1)*(math.cos(self.phi[i])),(-self.k3)*(math.sin(self.phi[i])), 0, 0],
@@ -130,139 +157,159 @@ class Controller:
             f1_inv = np.linalg.inv(f1)
             #print ("f1-1", f1_inv)
             xd_x_to = self.Xd*self.ti
-            print ("xd*xto \n", xd_x_to)
+            #print ("xd*xto \n", xd_x_to)
 
             kd_Xtil = self.kd.dot(Xtil)
 
-            print ("kd_Xtil \n", kd_Xtil)
+            #print ("kd_Xtil \n", kd_Xtil)
 
             tanh_kd_Xtil = np.transpose([np.array([math.tanh(xi) for xi in kd_Xtil])])
-            print("tanh_kd_Xtil \n",tanh_kd_Xtil)
+            #print("tanh_kd_Xtil \n",tanh_kd_Xtil)
                     
             part3 = self.kp.dot(tanh_kd_Xtil)
 
-            print("kp*tanh_kd_til \n", part3)
+            #print("kp*tanh_kd_til \n", part3)
             
             xd_kp = xd_x_to + part3
             #print ("part1 \n", f1_inv_x_xd.diagonal()) 
-            print ("xd_x_to + part3 \n", xd_kp)
-            f1_inv_x_xd = (f1_inv).dot(xd_kp)
+            #print ("xd_x_to + part3 \n", xd_kp)
+            #f1_inv_x_xd = (f1_inv).dot(xd_kp)
 
-            print ("f1_inv_x_xd \n", f1_inv_x_xd) 
+            #print ("f1_inv_x_xd \n", f1_inv_x_xd) 
             self.U[i] = ((f1_inv).dot(xd_kp))*self.ganho
 
-            print (self.U[i][0][0], self.U[i][1][0], self.U[i][2][0])
+            vel_msg.linear.x = self.U[i][0][0]
+            vel_msg.linear.y = self.U[i][1][0]
+            vel_msg.linear.z = self.U[i][2][0]
+            vel_msg.angular.x = 0
+            vel_msg.angular.y = 0
+            vel_msg.angular.z = 0
+
+            if not self.rospy.is_shutdown():                
+                self.pubVel2.publish(vel_msg)
+            time.sleep(self.ti)
+            
+            #print (self.U[i][0][0], self.U[i][1][0], self.U[i][2][0])
             #Define a nova posicão do drone1
             self.x[i+1] = self.x[i]+self.ti*self.U[i][0][0]
             self.y[i+1] = self.y[i]+self.ti*self.U[i][1][0]
             self.z[i+1] = self.z[i]+self.ti*self.U[i][2][0]
             self.phi[i+1] = self.phi[i]+self.ti*self.U[i][3][0]
             
-            print (self.x[i+1], ",", self.y[i+1], ",", self.z[i+1], self.phi[i+1])       
-        mpl.rcParams['legend.fontsize'] = 10
-        fig = plt.figure()
-        ax = Axes3D(plt.gcf())
+            #time.sleep(self.ti)
 
-        ax.plot(self.x[:,0],self.y[:,0],self.z[:,0])
+            xf = self.x[i][0]
+            yf = self.y[i][0]
+            zf = self.z[i][0]
+    
+            #Distancia entre os drones
+            rhof = 0
+            #alfaf
+            alphaf = 0
+    
+            #betaf
+            betaf = 0
+            #q
+            q = [xf, yf, zf, rhof, betaf, alphaf]
+
+            
+            
+            self.qtil[:,i] = (self.qdes - np.transpose(q))[:,0]       
+            
+
+            #Ganhos
+            L1 = 0.2*np.identity(6)
+            L2 = 0.3*np.identity(6)            
+            L2_x_qtil = L2.dot(self.qtil[:,i])
+            tanh_L2qtil = [math.tanh(li) for li in L2_x_qtil]         
+            qrefp = L1.dot(tanh_L2qtil) 
+            jacob =np.array([[1, 0, 0, 0, 0, 0],
+                    [0, 1, 0, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [1, 0, 0, math.cos(alphaf)*math.cos(betaf), -rhof*math.sin(alphaf)*math.cos(betaf), -rhof*math.cos(alphaf)*math.sin(betaf)],
+                    [0, 1, 0, math.sin(alphaf)*math.cos(betaf), -rhof*math.sin(alphaf)*math.sin(betaf),  -rhof*math.cos(alphaf)*math.cos(betaf)],
+                    [0, 0, 1, math.sin(betaf), rhof*math.cos(betaf), 0]])
+
+            xrefp = jacob.dot(qrefp)
+
+            K = np.array([  [math.cos(self.z[i]), math.sin(self.z[i]), 0, 0, 0, 0],
+                            [-math.sin(self.z[i])/self.a, math.cos(self.z[i])/self.a, 0, 0, 0, 0],
+                            [0, 0, 1, 0, 0, 0],
+                            [0, 0, 0, math.cos(self.phi[i]), -math.sin(self.phi[i]), 0],
+                            [0, 0, 0, math.sin(self.phi[i]), math.cos(self.phi[i]), 0],
+                            [0, 0, 0, 0, 0, 1]])
+
+            self.v[i] = K.dot(xrefp)
+            """
+            vel_msg.linear.x = self.v[i][0]
+            vel_msg.linear.y = self.v[i][1]
+            vel_msg.linear.z = self.v[i][2]
+            vel_msg.angular.x = 0
+            vel_msg.angular.y = 0
+            vel_msg.angular.z = 0"""
+
+            """if not self.rospy.is_shutdown():                
+                self.pubVel2.publish(vel_msg)
+            time.sleep(self.ti)"""
+
+            
+
+            """%Ganhos
+            xrefp = jacob*qrefp;
+            
+            K = [cos(pos(3,i)) sin(pos(3,i)) 0 0 0 0; ...
+                -sin(pos(3,i))/a cos(pos(3,i))/a 0 0 0 0; ...
+                0 0 1 0 0 0; ...
+                0 0 0 cos(phid) -sin(phid) 0; ...
+                0 0 0 sin(phid) cos(phid) 0; ...
+                0 0 0 0 0 1];
+            
+            v{i} = K*xrefp; 
+            """
+            #print (self.x[i+1], ",", self.y[i+1], ",", self.z[i+1], self.phi[i+1])       
+
+            """
+            u = [ Uzponto Upsi Uphi Utheta ]
+            Uzponto = velocidade linear sobre o eixo z
+
+            Upsi = comando de velocidade angular em torno do eixo Z
+
+            Uphi (UVy) = comando de inclinação em relação a xW (eixo yB do drone)
+
+            Utheta (UVx) = comando de inclinação em relação ao eixo yW (eixo xB do drone)
+
+            """
+       
+        #mpl.rcParams['legend.fontsize'] = 10
+        print (self.odomx)
+        fig = plt.figure()
+        ax = fig.gca(projection='3d')
+
+        #ax = Axes3D(plt.gcf())
+        ax.plot(self.odomx, self.odomy, label='Experimento')
+        ax.plot(self.x[:,0],self.y[:,0],label='Simulação')
+        plt.legend()
+        
         plt.show()
         
     
 
 
 
-        
-        while not self.rospy.is_shutdown():
-            self.pubVel.publish(vel_msg)
+        """
+        while not self.r ospy.is_shutdown():
             if (self.change):
                 print (self.x)
             
             self.change=False
             self.rate.sleep()
-            break
+            break"""
 
         """
         self.fig = plt.figure(figsize=(18,10))
         
         while not self.rospy.is_shutdown():
-            self.msg=LaserScan()
-            self.RosAria_msg=Odometry()
-            self.x_cartesian=np.zeros(256,dtype=float)
-            self.y_cartesian=np.zeros(256,dtype=float)
-            self.cartesian = [ ]
-            self.start = time.time()
-            if(self.change):
-                for i in range(0,len(self.ranges)):
-                    #separando amostras por range de angulo (45graus) e por distancia do laser(0.5m)
-                    if(i>=128 and i<=383 and self.ranges[i]<0.7): #separando amostras por range de angulo
-                        self.x_cartesian[i-128]=self.ranges[i]*(math.cos(self.angle_min+(self.angle_increment*i)))
-                        self.y_cartesian[i-128]=self.ranges[i]*(math.sin(self.angle_min+(self.angle_increment*i)))
-                        if (self.y_cartesian[i-128]<-0.04 or self.y_cartesian[i-128]>0.04): # limiar de distancia entre as pernas
-                            self.cartesian.append([self.x_cartesian[i-128],self.y_cartesian[i-128]])                        
-                self.cart= np.array(self.cartesian)
-                if self.cartesian != []:
-                   self.count_vec.append(self.count*0.1)
-                   self.count=self.count+1
-                   self.legsCluster() 
-                   self.Robot_Linear_velocity.append(self.robot_linear_vel*1000)
-                   
-                if(len(self.count_vec)==200):
-                    sos = signal.butter(2, 0.2, 'hp', fs=100, output='sos')
-                    self.Y = signal.sosfilt(sos, self.LDD_vector)
-
-                    # self.b,self.a=signal.butter(2,0.2,'highpass')
-                    # self.Y=signal.lfilter(b,a,self.LDD_vector)
-                    self.wflc3(self.Y,self.mu_0,self.mu_1,self.mu_b,self.omega_0_init,self.M)
-                    self.flc(self.LDD_vector,self.mu,self.Gait_Candence_vector,self.M)
-
-                    self.Estimated_Human_Linear_Velocity=np.multiply(self.Gait_Candence_vector,self.Gait_Amplitude_vector)/100
-                    #print(self.LDD_vector) 
-                    
-                    self.ax1=plt.subplot2grid((5,1),(0,0))
-                    plt.plot(self.count_vec,self.R_leg_pose,'b-',self.count_vec,self.L_leg_pose,'r--')
-                    
-                    plt.xticks(np.arange(0,25,5))
-                    plt.yticks(np.arange(0,1500,500))
-                    plt.legend(['Perna Direita','Perna Esquerda'],loc='best',fontsize = 'x-small')
-                    
-                    plt.ylabel('[mm]')
-                    plt.grid(True)
-
-                    self.ax2=plt.subplot2grid((5,1),(1,0))
-                    plt.plot(self.count_vec,self.LDD_vector,'b-')
-                    plt.xticks(np.arange(0,22,5))
-                    plt.yticks(np.arange(-300,600,300))
-                    plt.ylabel('[mm]')
-                    plt.grid(True)
-                    
-                    #print(self.Gait_Candence_vector)
-                    self.ax3=plt.subplot2grid((5,1),(2,0))
-                    plt.plot(self.count_vec,self.Gait_Candence_vector,'b-')
-                    plt.xticks(np.arange(0,25,5))
-                    plt.yticks(np.arange(0,3,1 ))
-                    plt.ylabel('[passos/s]')
-                    plt.grid(True)
-
-                    self.ax4=plt.subplot2grid((5,1),(3,0))
-                    plt.plot(self.count_vec,self.Gait_Amplitude_vector,'b-')
-                    #plt.xticks(np.arange(0,25,5))
-                    plt.ylabel('[mm]')
-                    #plt.yticks(np.arange(0,12.5,2.5))
-                    plt.grid(True)
-
-                    self.ax3=plt.subplot2grid((5,1),(4,0))
-                    plt.plot(self.count_vec,self.Estimated_Human_Linear_Velocity*100,'b-',self.count_vec,self.Robot_Linear_velocity,'--')
-                    plt.xticks(np.arange(0,25,5))
-                    plt.yticks(np.arange(0,800,200))
-                    plt.legend(['Vhumano','Vrobô'],loc='best',fontsize = 'x-small')
-                    plt.xlabel('[s]')
-                    plt.ylabel('[mm/s]')
-                    #plt.yticks(np.arange(0,12.5,2.5))
-                    plt.grid(True)
-                
-
-
-                    #plt.tight_layout()
-                    #self.fig.savefig('graphs.png')
+            
                     self.fig.show() 
                 self.change=False
                   
