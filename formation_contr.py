@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import rospy
-from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
 from turtlesim.msg import Pose
@@ -58,7 +57,7 @@ class Controller:
         self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
-        self.qdes = np.transpose([[2, 1, 1.5, 1, 0, 0]])
+        self.qdes = np.transpose([2, 1, 1.5, 1, 0, 0])
         #self.qdes = np.transpose([[8, 5.54, 0, 1, 0, 0]])
         
         self.qtil = np.zeros((6, len(self.t)))
@@ -108,10 +107,10 @@ class Controller:
         #Condições iniciais
         #Drone2
 
-        self.x2 = -2*np.ones(len(self.t), 1)
-        self.y2 = 1*np.ones(len(self.t), 1)
-        self.z2 = 0.75*np.ones(len(self.t),1)
-        self.phi2 = np.zeros(len(self.t),1)
+        self.x2 = -2*np.ones((len(self.t), 1))
+        self.y2 = 1*np.ones((len(self.t), 1))
+        self.z2 = 0.75*np.ones((len(self.t),1))
+        self.phi2 = np.zeros((len(self.t),1))
 
 
     def get_robot_velocity(self,msg):
@@ -184,12 +183,63 @@ class Controller:
 
         return self.U
 
-    def controleFormacao(self, odomx, odomy, odomz):
+    def controleFormacao(self, odomx=None, odomy=None, odomz=None, odomphi=None, odomx2=None, odomy2=None, odomz2=None):
         xf = odomx
         yf = odomy
         zf = odomz
 
-        rhof = sqrt((x2(i) - odomx)^2 + (y2(i) - odomy)^2 + (z2(i) - odomz)^2);
+        #rhof
+        rhof = math.sqrt((odomx2 - odomx)**2 + (odomy2 - odomy)**2 + (odomz2 - odomz)**2)
+
+        #alphaf
+        alphaf =  math.atan2((odomy2 - odomy), (odomx2-odomx))
+
+        #betaf
+        betaf = math.atan2((odomz2 - odomz), math.sqrt((odomx2 - odomx)**2 + (odomy2 - odomy)**2))
+
+        #q
+        q = np.array([xf, yf, zf, rhof, betaf, alphaf])
+
+        #qtil
+        qtil = (self.qdes - np.transpose(q))
+
+        #Matriz de ganhos
+        L1 = 0.2*np.identity(6)
+        L2 = 0.3*np.identity(6)   
+
+        #qrefp = L1*tanh(L2*qtil)
+
+        #L2*qtil
+        #retorna uma matriz com uma única columa .shape(6,)
+        L2_x_qtil = L2.dot(qtil)
+        
+        #tanh(L2*qtil)
+        tanh_l2_qtil = [math.tanh(x) for x in L2_x_qtil]
+
+        qrefp = L1.dot(tanh_l2_qtil)
+
+        jacob = np.array([
+                [1, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0],
+                [0, 0, 1, 0, 0, 0],
+                [1, 0, 0, math.cos(alphaf)*math.cos(betaf), -rhof*math.sin(alphaf)*math.cos(betaf), -rhof*math.cos(alphaf)*math.sin(betaf)],
+                [0, 1, 0, math.sin(alphaf)*math.cos(betaf), rhof*math.cos(alphaf)*math.cos(betaf),  -rhof*math.sin(alphaf)*math.sin(betaf)],
+                [0, 0, 1, math.sin(betaf), 0, rhof*math.cos(betaf)]])
+
+
+        xrefp = jacob.dot(qrefp)
+
+
+        K = np.array([
+            [math.cos(odomz), math.sin(odomz), 0, 0, 0, 0],
+            [-math.sin(odomz)/self.a, math.cos(odomz)/self.a, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0],
+            [0, 0, 0, math.cos(odomphi), -math.sin(odomphi), 0],
+            [0, 0, 0, math.sin(odomphi), math.cos(odomphi), 0],
+            [0, 0, 0, 0, 0, 1]])
+        
+
+        return qrefp
 
     def run(self):        
 
@@ -223,56 +273,6 @@ class Controller:
             self.rate.sleep()
 
             """
-            #Define a nova posicão do drone1
-
-            xf = self.x[i][0]
-            yf = self.y[i][0]
-            zf = self.z[i][0]
-    
-            #Distancia entre os drones
-            rhof = 0
-            #alfaf
-            alphaf = 0
-    
-            #betaf
-            betaf = 0
-            #q
-            q = [xf, yf, zf, rhof, betaf, alphaf]
-
-            
-            
-            #self.qtil[:,i] = (self.qdes - np.transpose(q))[:,0]       
-            qtil = (self.qdes - np.transpose(q))[:,0]  
-
-            #Ganhos
-            L1 = 0.2*np.identity(6)
-            L2 = 0.3*np.identity(6)            
-            L2_x_qtil = L2.dot(qtil)
-            tanh_L2qtil = [math.tanh(li) for li in L2_x_qtil]         
-            qrefp = L1.dot(tanh_L2qtil) 
-
-            
-            jacob2 = np.array([
-                [1, 0, 0, 0, 0, 0],
-                [0, 1, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0],
-                [1, 0, 0, math.cos(alphaf)*math.cos(betaf), -rhof*math.sin(alphaf)*math.cos(betaf), -rhof*math.cos(alphaf)*math.sin(betaf)],
-                [0, 1, 0, math.sin(alphaf)*math.cos(betaf), rhof*math.cos(alphaf)*math.cos(betaf),  -rhof*math.sin(alphaf)*math.sin(betaf)],
-                [0, 0, 1, math.sin(betaf), 0, rhof*math.cos(betaf)]])
-
-
-
-
-            jacob = np.array([
-                    [1, 0, 0, 0, 0, 0],
-                    [0, 1, 0, 0, 0, 0],
-                    [0, 0, 1, 0, 0, 0],
-                    [1, 0, 0, math.cos(alphaf)*math.cos(betaf), -rhof*math.sin(alphaf)*math.cos(betaf), -rhof*math.cos(alphaf)*math.sin(betaf)],
-                    [0, 1, 0, math.sin(alphaf)*math.cos(betaf), -rhof*math.sin(alphaf)*math.sin(betaf),  -rhof*math.cos(alphaf)*math.cos(betaf)],
-                    [0, 0, 1, math.sin(betaf), rhof*math.cos(betaf), 0]])
-
-            xrefp = jacob2.dot(qrefp)
-
             K = np.array([  [math.cos(self.z[i]), math.sin(self.z[i]), 0, 0, 0, 0],
                             [-math.sin(self.z[i])/self.a, math.cos(self.z[i])/self.a, 0, 0, 0, 0],
                             [0, 0, 1, 0, 0, 0],
