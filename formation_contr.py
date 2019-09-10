@@ -87,6 +87,7 @@ class Controller:
         self.kd = np.diag([self.kdx, self.kdy, self.kdz, self.kdphi])
 
         #Condições iniciais
+        #Drone 1
         self.x = 0*np.ones((len(self.t), 1))
         self.y = 0*np.ones((len(self.t),1))
         self.z = np.ones((len(self.t),1))
@@ -103,6 +104,14 @@ class Controller:
         self.odomy = 0*np.zeros(len(self.t)-1)
         self.odomz = 1*np.zeros(len(self.t)-1)
         self.erro = np.zeros((3,len(self.t)-1))
+
+        #Condições iniciais
+        #Drone2
+
+        self.x2 = -2*np.ones(len(self.t), 1)
+        self.y2 = 1*np.ones(len(self.t), 1)
+        self.z2 = 0.75*np.ones(len(self.t),1)
+        self.phi2 = np.zeros(len(self.t),1)
 
 
     def get_robot_velocity(self,msg):
@@ -126,10 +135,6 @@ class Controller:
             self.change = True
         return
 
-    def get_turtle_odom(self, msg):
-        x = msg.x
-        y = msg.y
-        self.odom_drone = (x, y, 0, 0.0)
 
     def takeOff(self, drone_name):
         pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
@@ -183,6 +188,8 @@ class Controller:
         xf = odomx
         yf = odomy
         zf = odomz
+
+        rhof = sqrt((x2(i) - odomx)^2 + (y2(i) - odomy)^2 + (z2(i) - odomz)^2);
 
     def run(self):        
 
