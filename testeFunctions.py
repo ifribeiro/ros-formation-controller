@@ -9,7 +9,7 @@ odomy2=0.8
 odomz2=1
 odomphi = 0.0
 a = 0.2
-
+To = 0.1
 
 qdes = np.transpose([2, 1, 1.5, 1, 0, 0])
 
@@ -68,7 +68,13 @@ def controleFormacao(odomx=None, odomy=None, odomz=None, odomx2=None, odomy2=Non
             [0, 0, 0, math.sin(odomphi), math.cos(odomphi), 0],
             [0, 0, 0, 0, 0, 1]])
 
-    return K
+    v = K.dot(xrefp)
+
+    x2 = odomx2+To*v[0]
+    y2 = odomy2+To*v[1]
+    z2 = odomz2+To*v[2]
+
+    return (x2,y2,z2)
 
 q = controleFormacao(odomx=1, odomy=1, odomz=2, odomx2=0.5, odomy2=0.8, odomz2=1)
 

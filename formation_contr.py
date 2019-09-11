@@ -26,21 +26,22 @@ class Controller:
         # self.initParameters()        
         self.initvariables() # inicializacao de variaveis
         self.initSubscribers() # topicos a serem subscritos por ex odometria
-        self.initPublishers(self.bebop1_name)
+        self.initPublishers(self.bebop1_name, self.bebop2_name)
         self.change=False #label para indicar mudanca de variaveis        
         self.run()  # loop de controle
 
     def initSubscribers(self):
         # --> metodo que vai atualizar dados da mensagem para atributos do objeto
-        #self.subvel = self.rospy.Subscriber("/turtle1/pose", Pose, self.get_robot_velocity)
         self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
-        #self.subTurtle = self.rospy.Subscriber('/%s/pose'%("turtle1"), Pose, self.get_turtle_odom)
-        return
-    def initPublishers(self, bebop1_name):
-        self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
-        self.pubLand = rospy.Publisher('/%s/land'%(bebop1_name), Empty, queue_size=10)
+        self.subOdom2 = self.rospy.Subscriber('/%s/odom'%(self.bebop2_name), Odometry, self.get_drone2_odom)
 
-        #self.pubVel2 = rospy.Publisher('turtle1/cmd_vel', Twist, queue_size=10)
+        return
+    def initPublishers(self, bebop1_name, bebop2_name):
+        self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
+        self.pubVel2 = rospy.Publisher('/%s/cmd_vel'%(bebop2_name), Twist, queue_size=10)
+
+        self.pubLand = rospy.Publisher('/%s/land'%(bebop1_name), Empty, queue_size=10)
+        self.pubLand2 = rospy.Publisher('/%s/land'%(bebop2_name), Empty, queue_size=10)
 
         return 
     def initTimeArray(self, start_time, end_time):
@@ -48,6 +49,7 @@ class Controller:
 
     def initvariables(self):
         self.bebop1_name = 'bebop1'
+        self.bebop2_name = 'bebop2'
         self.rate = self.rospy.Rate(10)
         self.Xd = np.transpose([[2, 1, 1.5, 0]])   
         #self.Xd = np.transpose([[8, 5.54, 0, 0]])
@@ -97,6 +99,8 @@ class Controller:
         self.odom_drone = (0, 0, 1, 0)
         self.old_odom_drone = (0,0,1,0)
 
+        self.odom_drone2 = (1, 1, 1, 0)
+
         self.a=0.2
         self.v = {}
         self.odomx = 0*np.ones(len(self.t)-1)
@@ -133,6 +137,14 @@ class Controller:
         if(self.old_odom_drone != self.odom_drone):
             self.change = True
         return
+
+    def get_drone2_odom(self,msg):
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        z = msg.pose.pose.position.z
+        psi = msg.pose.pose.orientation.z
+
+        self.odom_drone2 = (x, y, z, psi)
 
 
     def takeOff(self, drone_name):
@@ -237,16 +249,28 @@ class Controller:
             [0, 0, 0, math.cos(odomphi), -math.sin(odomphi), 0],
             [0, 0, 0, math.sin(odomphi), math.cos(odomphi), 0],
             [0, 0, 0, 0, 0, 1]])
-        
 
-        return qrefp
+        
+        v = K.dot(xrefp)
+        
+        x2 = odomx2+self.ti*v[0]
+        y2 = odomy2+self.ti*v[1]
+        z2 = odomz2+self.ti*v[2]
+
+
+        return v
 
     def run(self):        
 
         #a execução espera o comando de takeoff finalizar
-        self.takeOff(self.bebop1_name)  
+        self.takeOff(self.bebop1_name)
+        self.takeOff(self.bebop2_name)
+
+        self.rospy.sleep(3)
         #print(self.t)
         vel_msg = Twist()
+        vel_msg2 = Twist()
+        
 
         for i in range(0,len(self.t)-1):
             X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])
@@ -270,73 +294,24 @@ class Controller:
 
             if not self.rospy.is_shutdown():                
                 self.pubVel.publish(vel_msg)
+            
+            U2 = self.controleFormacao(odomx=self.odom_drone[0],odomy=self.odom_drone[1],odomz=self.odom_drone[2],odomphi=self.odom_drone[3],
+            odomx2=self.odom_drone2[0],odomy2=self.odom_drone2[1],odomz2=self.odom_drone2[2])
+            
+            vel_msg2.linear.x = U2[0]
+            vel_msg2.linear.y = U2[1]
+            vel_msg2.linear.z = U2[2]
+            vel_msg2.angular.z = U2[3]
+            if not self.rospy.is_shutdown():                
+                self.pubVel2.publish(vel_msg)
             self.rate.sleep()
 
-            """
-            K = np.array([  [math.cos(self.z[i]), math.sin(self.z[i]), 0, 0, 0, 0],
-                            [-math.sin(self.z[i])/self.a, math.cos(self.z[i])/self.a, 0, 0, 0, 0],
-                            [0, 0, 1, 0, 0, 0],
-                            [0, 0, 0, math.cos(self.phi[i]), -math.sin(self.phi[i]), 0],
-                            [0, 0, 0, math.sin(self.phi[i]), math.cos(self.phi[i]), 0],
-                            [0, 0, 0, 0, 0, 1]])
-
-            self.v[i] = K.dot(xrefp)"""
-
-
-            """ vel_msg.linear.x = self.v[i][1]
-            vel_msg.linear.y = self.v[i][0]
-            vel_msg.linear.z = self.v[i][2]
-            vel_msg.angular.x = 0
-            vel_msg.angular.y = 0
-            vel_msg.angular.z = self.v[i][3]
-
-
-            if not self.rospy.is_shutdown():                
-                self.pubVel.publish(vel_msg)
-            self.rate.sleep()"""
-
-            """
-            vel_msg.linear.x = self.v[i][0]
-            vel_msg.linear.y = self.v[i][1]
-            vel_msg.linear.z = self.v[i][2]
-            vel_msg.angular.x = 0
-            vel_msg.angular.y = 0
-            vel_msg.angular.z = 0"""
-
-            """if not self.rospy.is_shutdown():                
-                self.pubVel2.publish(vel_msg)
-            time.sleep(self.ti)"""
-
-            
-
-            """%Ganhos
-            xrefp = jacob*qrefp;
-            
-            K = [cos(pos(3,i)) sin(pos(3,i)) 0 0 0 0; ...
-                -sin(pos(3,i))/a cos(pos(3,i))/a 0 0 0 0; ...
-                0 0 1 0 0 0; ...
-                0 0 0 cos(phid) -sin(phid) 0; ...
-                0 0 0 sin(phid) cos(phid) 0; ...
-                0 0 0 0 0 1];
-            
-            v{i} = K*xrefp; 
-            """
-            #print (self.x[i+1], ",", self.y[i+1], ",", self.z[i+1], self.phi[i+1])       
-
-            """
-            u = [ Uzponto Upsi Uphi Utheta ]
-            Uzponto = velocidade linear sobre o eixo z
-
-            Upsi = comando de velocidade angular em torno do eixo Z
-
-            Uphi (UVy) = comando de inclinação em relação a xW (eixo yB do drone)
-
-            Utheta (UVx) = comando de inclinação em relação ao eixo yW (eixo xB do drone)
-
-            """
-
-        self.land("bebop1")
+        
         #mpl.rcParams['legend.fontsize'] = 10
+
+        self.land(self.bebop1_name)
+        self.land(self.bebop2_name)
+
         fig = plt.figure()
         
         """ax = fig.gca(projection='3d')
