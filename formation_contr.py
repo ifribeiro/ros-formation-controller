@@ -111,6 +111,9 @@ class Controller:
         #Condições iniciais
         #Drone2
 
+        #initial position Drone2
+        self.xi = np.transpose([[-2, 1, 0.75, 0]])  
+
         self.x2 = -2*np.ones((len(self.t), 1))
         self.y2 = 1*np.ones((len(self.t), 1))
         self.z2 = 0.75*np.ones((len(self.t),1))
@@ -150,20 +153,26 @@ class Controller:
     def takeOff(self, drone_name):
         pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
         rate_10 = self.rospy.Rate(10) # 10hz
+        self.rospy.loginfo("Taking Off %s ..."%(drone_name))
         for i in range(1,25):
             pub.publish(Empty())
             rate_10.sleep()
+        self.rospy.loginfo("Done.")
         return True
+        
 
     def land(self, drone_name):
         pub = self.rospy.Publisher("/%s/land"%(drone_name), Empty, queue_size=10)    
         rate_10 = self.rospy.Rate(10) # 10hz
+        self.rospy.loginfo("Landing %s ..."%(drone_name))
         for i in range(1,25):
             pub.publish(Empty())
             rate_10.sleep()
+        self.rospy.loginfo("Done.")
         return True
+        
 
-    def controlePosicionamento(self, vel_msg = None, Xtil=None, j=None, phi = None):
+    def controlePosicionamento(self, Xd=None,Xtil=None, j=None, phi = None):
         f1 = [  
             [(self.k1)*(math.cos(phi[j])),(-self.k3)*(math.sin(phi[j])), 0, 0],
             [(self.k1)*math.sin(phi[j]), self.k3*math.cos(phi[j]), 0, 0],
@@ -171,7 +180,7 @@ class Controller:
             [0, 0, 0, self.k7]]
         f1_inv = np.linalg.inv(f1)
         #print ("f1-1", f1_inv)
-        xd_x_to = self.Xd*self.ti
+        xd_x_to = Xd*self.ti
         #print ("xd*xto \n", xd_x_to)
 
         kd_Xtil = self.kd.dot(Xtil)
@@ -216,8 +225,8 @@ class Controller:
         qtil = (self.qdes - np.transpose(q))
 
         #Matriz de ganhos
-        L1 = 0.2*np.identity(6)
-        L2 = 0.3*np.identity(6)   
+        L1 = 0.3*np.identity(6)
+        L2 = 0.5*np.identity(6)   
 
         #qrefp = L1*tanh(L2*qtil)
 
@@ -259,6 +268,32 @@ class Controller:
 
 
         return v
+    def goToInitialPosition(self, bebop_name, xd=None, yd=None, zd=None, phi=0):
+        Xd = np.transpose([[xd, yd, zd, phi]])
+        self.rospy.loginfo("Setting %s initial position..."%(bebop_name))
+        vel_msg = Twist()
+        for i in range(0,len(self.t)-1):
+            X = np.transpose([[self.odom_drone2[0] , self.odom_drone2[1], self.odom_drone2[2], self.odom_drone2[3]]])
+
+            #X = np.transpose([[self.x[i] , self.y[i], self.z[i], self.phi[i]]])
+
+            Xtil = Xd - X
+
+            """self.erro[0,i] = Xtil[0,0]
+            self.erro[1,i] = Xtil[1,0]
+            self.erro[2,i] = Xtil[2,0]"""
+
+            U = self.controlePosicionamento(Xd=Xd, Xtil=Xtil, j=i, phi=self.phi)
+            
+            vel_msg.linear.x = U[i][0][0]
+            vel_msg.linear.y = U[i][1][0]
+            vel_msg.linear.z = U[i][2][0]
+            vel_msg.angular.z = U[i][3][0]
+
+            if not self.rospy.is_shutdown():                
+                self.pubVel2.publish(vel_msg)
+            self.rate.sleep()
+        self.rospy.loginfo("Done.")
 
     def run(self):        
 
@@ -267,11 +302,13 @@ class Controller:
         self.takeOff(self.bebop2_name)
 
         self.rospy.sleep(3)
+        self.goToInitialPosition(bebop_name=self.bebop2_name, xd=-2, yd=1, zd=0.75, phi=0)
+        self.rospy.sleep(3)
         #print(self.t)
         vel_msg = Twist()
         vel_msg2 = Twist()
         
-
+        self.rospy.loginfo("Iniating formation...")
         for i in range(0,len(self.t)-1):
             X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])
             self.odomx[i] = self.odom_drone[0]
@@ -285,7 +322,7 @@ class Controller:
             self.erro[1,i] = Xtil[1,0]
             self.erro[2,i] = Xtil[2,0]
 
-            U = self.controlePosicionamento(vel_msg=vel_msg, Xtil=Xtil, j=i, phi=self.phi)
+            U = self.controlePosicionamento(Xd=self.Xd,Xtil=Xtil, j=i, phi=self.phi)
             
             vel_msg.linear.x = U[i][0][0]
             vel_msg.linear.y = U[i][1][0]
@@ -308,7 +345,9 @@ class Controller:
 
         
         #mpl.rcParams['legend.fontsize'] = 10
+        self.rospy.loginfo("Done.")
 
+        
         self.land(self.bebop1_name)
         self.land(self.bebop2_name)
 
@@ -323,35 +362,9 @@ class Controller:
         plt.plot(self.t[:-1], self.erro[0,:], label="Erro X")        
         plt.plot(self.t[:-1], self.erro[1,:], label="Erro Y")        
         plt.plot(self.t[:-1], self.erro[2,:], label="Erro Z")
+        plt.title("Erros de posicionamento")
         plt.legend()      
         plt.show()
-        
-    
-
-
-
-        """
-        while not self.r ospy.is_shutdown():
-            if (self.change):
-                print (self.x)
-            
-            self.change=False
-            self.rate.sleep()
-            break"""
-
-        """
-        self.fig = plt.figure(figsize=(18,10))
-        
-        while not self.rospy.is_shutdown():
-            
-                    self.fig.show() 
-                self.change=False
-                  
-
-
-            
-               # plt.clf()
-        """
                 
     
 if __name__ == '__main__':
