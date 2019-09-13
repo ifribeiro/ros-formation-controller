@@ -3,7 +3,6 @@
 import rospy
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
-from turtlesim.msg import Pose
 from geometry_msgs.msg import Twist
 
 import matplotlib as mpl
@@ -22,7 +21,7 @@ class Controller:
     def __init__(self):
         self.rospy=rospy
         self.rospy.init_node('listener',anonymous=True)
-        self.rospy.loginfo("Starting Formation Controller") #" starting controle de formacao de drones"
+        self.rospy.loginfo("Iniciando o controle de formação") #" starting controle de formacao de drones"
         # self.initParameters()        
         self.initvariables() # inicializacao de variaveis
         self.initSubscribers() # topicos a serem subscritos por ex odometria
@@ -31,23 +30,38 @@ class Controller:
         self.run()  # loop de controle
 
     def initSubscribers(self):
-        # --> metodo que vai atualizar dados da mensagem para atributos do objeto
+        """
+        Inicia os Subscribers dos tópicos do ROS
+        """
+
         self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
         self.subOdom2 = self.rospy.Subscriber('/%s/odom'%(self.bebop2_name), Odometry, self.get_drone2_odom)
 
         return
+
     def initPublishers(self, bebop1_name, bebop2_name):
+        """    
+        Inicia os Publishers onde serão publicas mensagens 
+
+        Parâmetros: 
+        bebop1_name, bebop2_name = nomes dos drones da formação definidos
+        no namespace dos arquivos .launch do ROS
+
+        """
+
         self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
         self.pubVel2 = rospy.Publisher('/%s/cmd_vel'%(bebop2_name), Twist, queue_size=10)
 
         self.pubLand = rospy.Publisher('/%s/land'%(bebop1_name), Empty, queue_size=10)
         self.pubLand2 = rospy.Publisher('/%s/land'%(bebop2_name), Empty, queue_size=10)
 
-        return 
-    def initTimeArray(self, start_time, end_time):
-        np.range()
+        return
 
     def initvariables(self):
+        """
+        Inicia as várias que serão utilizadas no código
+        """
+
         self.bebop1_name = 'bebop1'
         self.bebop2_name = 'bebop2'
         self.rate = self.rospy.Rate(10)
@@ -119,12 +133,13 @@ class Controller:
         self.z2 = 0.75*np.ones((len(self.t),1))
         self.phi2 = np.zeros((len(self.t),1))
 
-
-    def get_robot_velocity(self,msg):
-        robot_linear_vel = msg
-        self.robot_linear_vel = (robot_linear_vel.x, robot_linear_vel.y, robot_linear_vel.theta)
-        return
     def get_drone_odom(self, msg):
+
+        """
+        Atualiza a odometria do Drone 1
+        Parametros: 
+        msg = Mensagem recebida do tópico
+        """
         
         self.old_odom_drone = self.odom_drone
 
@@ -142,6 +157,12 @@ class Controller:
         return
 
     def get_drone2_odom(self,msg):
+        """
+        Atualiza a odometria do Drone 2
+        Parametros: 
+        msg = Mensagem recebida do tópico
+        """
+
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
@@ -151,6 +172,15 @@ class Controller:
 
 
     def takeOff(self, drone_name):
+
+        """
+        Inicia o vôo do drone
+
+        Parametros: 
+        drone_name = Nome do drone
+
+        """
+
         pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
         rate_10 = self.rospy.Rate(10) # 10hz
         self.rospy.loginfo("Taking Off %s ..."%(drone_name))
@@ -162,6 +192,13 @@ class Controller:
         
 
     def land(self, drone_name):
+        """
+        Aterrissa o drone
+
+        Parametros:
+        drone_name = Nome do drone
+        """
+
         pub = self.rospy.Publisher("/%s/land"%(drone_name), Empty, queue_size=10)    
         rate_10 = self.rospy.Rate(10) # 10hz
         self.rospy.loginfo("Landing %s ..."%(drone_name))
@@ -173,38 +210,44 @@ class Controller:
         
 
     def controlePosicionamento(self, Xd=None,Xtil=None, j=None, phi = None):
+        """
+        Realiza o controle de posicionamento do drone
+        Parametros:
+        Xd = Coordenadas da posição desejada
+        Xtil = Erros entre a posição desejada e a atual
+        j = incremento do tempo
+        phi = Orientação do drone
+
+        """
+
         f1 = [  
             [(self.k1)*(math.cos(phi[j])),(-self.k3)*(math.sin(phi[j])), 0, 0],
             [(self.k1)*math.sin(phi[j]), self.k3*math.cos(phi[j]), 0, 0],
             [0, 0, self.k5, 0],
             [0, 0, 0, self.k7]]
-        f1_inv = np.linalg.inv(f1)
-        #print ("f1-1", f1_inv)
-        xd_x_to = Xd*self.ti
-        #print ("xd*xto \n", xd_x_to)
 
+        f1_inv = np.linalg.inv(f1)        
+        xd_x_to = Xd*self.ti        
         kd_Xtil = self.kd.dot(Xtil)
-
-        #print ("kd_Xtil \n", kd_Xtil)
-
-        tanh_kd_Xtil = np.transpose([np.array([math.tanh(xi) for xi in kd_Xtil])])
-        #print("tanh_kd_Xtil \n",tanh_kd_Xtil)
-                
-        part3 = self.kp.dot(tanh_kd_Xtil)
-
-        #print("kp*tanh_kd_til \n", part3)
-        
+        tanh_kd_Xtil = np.transpose([np.array([math.tanh(xi) for xi in kd_Xtil])])                
+        part3 = self.kp.dot(tanh_kd_Xtil)        
         xd_kp = xd_x_to + part3
-        #print ("part1 \n", f1_inv_x_xd.diagonal()) 
-        #print ("xd_x_to + part3 \n", xd_kp)
-        #f1_inv_x_xd = (f1_inv).dot(xd_kp)
-
-        #print ("f1_inv_x_xd \n", f1_inv_x_xd) 
+        
         self.U[j] = ((f1_inv).dot(xd_kp))*self.ganho
 
         return self.U
 
     def controleFormacao(self, odomx=None, odomy=None, odomz=None, odomphi=None, odomx2=None, odomy2=None, odomz2=None):
+        """
+        Realiza o controle de formação
+
+        Parâmetros:
+        odomx,odomy,odomz,odomphi = Odometria do drone líder da formação
+        odomx2,odomy2,odomz2 = Odometria do segundo drone da formação
+
+        Retorna: a velocidade que deve ser aplicada ao segundo drone
+
+        """
         xf = odomx
         yf = odomy
         zf = odomz
@@ -268,9 +311,19 @@ class Controller:
 
 
         return v
-    def goToInitialPosition(self, bebop_name, xd=None, yd=None, zd=None, phi=0):
+
+
+    def goToInitialPositionDrone2(self, bebop_name, xd=None, yd=None, zd=None, phi=0):
+        """
+        Faz o drone ir para a posição inicial
+
+        Parametros:
+        bebop_name = Nome do drone
+        xd,yd,zd,phi = posição e orientação do drone
+
+        """
         Xd = np.transpose([[xd, yd, zd, phi]])
-        self.rospy.loginfo("Setting %s initial position..."%(bebop_name))
+        self.rospy.loginfo("Levando o %s para a posição inicial..."%(bebop_name))
         vel_msg = Twist()
         for i in range(0,len(self.t)-1):
             X = np.transpose([[self.odom_drone2[0] , self.odom_drone2[1], self.odom_drone2[2], self.odom_drone2[3]]])
@@ -293,7 +346,40 @@ class Controller:
             if not self.rospy.is_shutdown():                
                 self.pubVel2.publish(vel_msg)
             self.rate.sleep()
-        self.rospy.loginfo("Done.")
+        self.rospy.loginfo("Feito.")
+
+    def goToInitialPositionDrone1(self, bebop_name, xd=None, yd=None, zd=None, phi=0):
+
+        """
+        Faz o drone ir para a posição inicial
+
+        Parametros:
+        bebop_name = Nome do drone
+        xd,yd,zd,phi = posição e orientação do drone
+
+        """
+
+        Xd = np.transpose([[xd, yd, zd, phi]])
+        self.rospy.loginfo("Levando o %s para a posição inicial..."%(bebop_name))
+        vel_msg = Twist()
+        for i in range(0,len(self.t)-1):
+            X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])
+
+            #X = np.transpose([[self.x[i] , self.y[i], self.z[i], self.phi[i]]])
+
+            Xtil = Xd - X
+            U = self.controlePosicionamento(Xd=Xd, Xtil=Xtil, j=i, phi=self.phi)
+            
+            vel_msg.linear.x = U[i][0][0]
+            vel_msg.linear.y = U[i][1][0]
+            vel_msg.linear.z = U[i][2][0]
+            vel_msg.angular.z = U[i][3][0]
+
+            if not self.rospy.is_shutdown():                
+                self.pubVel.publish(vel_msg)
+            self.rate.sleep()
+        self.rospy.loginfo("Feito.")
+    
 
     def run(self):        
 
@@ -301,14 +387,18 @@ class Controller:
         self.takeOff(self.bebop1_name)
         self.takeOff(self.bebop2_name)
 
-        self.rospy.sleep(3)
-        self.goToInitialPosition(bebop_name=self.bebop2_name, xd=-2, yd=1, zd=0.75, phi=0)
-        self.rospy.sleep(3)
+        self.rospy.sleep(2)
+        self.goToInitialPositionDrone2(bebop_name=self.bebop2_name, xd=-2, yd=1, zd=0.75, phi=0)
+        self.rospy.sleep(2)
+        self.goToInitialPositionDrone1(bebop_name=self.bebop1_name, xd=0, yd=0, zd=0.75, phi=0)
+        self.rospy.sleep(2)
+
+
         #print(self.t)
         vel_msg = Twist()
         vel_msg2 = Twist()
         
-        self.rospy.loginfo("Iniating formation...")
+        self.rospy.loginfo("Iniciando a formação...")
         for i in range(0,len(self.t)-1):
             X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])
             self.odomx[i] = self.odom_drone[0]
@@ -345,7 +435,7 @@ class Controller:
 
         
         #mpl.rcParams['legend.fontsize'] = 10
-        self.rospy.loginfo("Done.")
+        self.rospy.loginfo("Formação finalizada.")
 
         
         self.land(self.bebop1_name)
