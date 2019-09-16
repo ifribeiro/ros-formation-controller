@@ -1,20 +1,15 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
-import rospy
+from mpl_toolkits.mplot3d import Axes3D
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
-from geometry_msgs.msg import Twist
 
-import matplotlib as mpl
-from mpl_toolkits.mplot3d import Axes3D
-
-import math
-import numpy as np
 import matplotlib.pyplot as plt
-import time
+import matplotlib as mpl
+import numpy as np
+import rospy
 import math
-#from scipy import signal
-from numpy import argmax, mean, diff, log, nonzero
 
 
 class Controller:
@@ -122,6 +117,8 @@ class Controller:
         self.odomz = 1*np.zeros(len(self.t)-1)
         self.erro = np.zeros((3,len(self.t)-1))
 
+        self.errosFormacao = np.zeros((3,len(self.t)-1))
+
         #Condições iniciais
         #Drone2
 
@@ -187,7 +184,7 @@ class Controller:
         for i in range(1,25):
             pub.publish(Empty())
             rate_10.sleep()
-        self.rospy.loginfo("Done.")
+        self.rospy.loginfo("Feito.")
         return True
         
 
@@ -205,7 +202,7 @@ class Controller:
         for i in range(1,25):
             pub.publish(Empty())
             rate_10.sleep()
-        self.rospy.loginfo("Done.")
+        self.rospy.loginfo("Feito.")
         return True
         
 
@@ -237,7 +234,7 @@ class Controller:
 
         return self.U
 
-    def controleFormacao(self, odomx=None, odomy=None, odomz=None, odomphi=None, odomx2=None, odomy2=None, odomz2=None):
+    def controleFormacao(self, j=None, odomx=None, odomy=None, odomz=None, odomphi=None, odomx2=None, odomy2=None, odomz2=None):
         """
         Realiza o controle de formação
 
@@ -266,6 +263,8 @@ class Controller:
 
         #qtil
         qtil = (self.qdes - np.transpose(q))
+
+        self.errosFormacao[:,j] = qtil[3:]
 
         #Matriz de ganhos
         L1 = 0.3*np.identity(6)
@@ -422,7 +421,7 @@ class Controller:
             if not self.rospy.is_shutdown():                
                 self.pubVel.publish(vel_msg)
             
-            U2 = self.controleFormacao(odomx=self.odom_drone[0],odomy=self.odom_drone[1],odomz=self.odom_drone[2],odomphi=self.odom_drone[3],
+            U2 = self.controleFormacao(j=i, odomx=self.odom_drone[0],odomy=self.odom_drone[1],odomz=self.odom_drone[2],odomphi=self.odom_drone[3],
             odomx2=self.odom_drone2[0],odomy2=self.odom_drone2[1],odomz2=self.odom_drone2[2])
             
             vel_msg2.linear.x = U2[0]
@@ -441,19 +440,47 @@ class Controller:
         self.land(self.bebop1_name)
         self.land(self.bebop2_name)
 
-        fig = plt.figure()
+        """erros = plt.figure(1)
+        errosFormacao = plt.figure(2)
+        ax1 = erros.add_subplot(111)
+        ax2 = errosFormacao.add_subplot(111)
+
+        ax1.plot(self.t[:-1], self.erro[0,:], label="Erro X")        
+        ax1.plot(self.t[:-1], self.erro[1,:], label="Erro Y")        
+        ax1.plot(self.t[:-1], self.erro[2,:], label="Erro Z")
+        ax1.set_title("Erros de posicionamento")
+        erros.show()
         
-        """ax = fig.gca(projection='3d')
+        ax2.plot(self.t[:-1], self.errosFormacao[0,:], label="Erro Form. X")        
+        ax2.plot(self.t[:-1], self.errosFormacao[1,:], label="Erro Form. Y")        
+        ax2.plot(self.t[:-1], self.errosFormacao[2,:], label="Erro Form. Z")
+        ax2.set_title("Erros de Formação")
+        errosFormacao.show()"""
+        fig, ax = plt.subplots(2)
+        fig.set_figheight(20)
+        fig.set_figwidth(20)
+        ax[0].plot(self.t[:-1], self.erro[0,:], label="Erro X", )        
+        ax[0].plot(self.t[:-1], self.erro[1,:], label="Erro Y")        
+        ax[0].plot(self.t[:-1], self.erro[2,:], label="Erro Z")
+        ax[0].set_title("Erros de posicionamento")
 
-        ax = Axes3D(plt.gcf())
-        ax.plot(self.odomx, self.odomy, self.odomz, label='Experimento')
-        ax.plot(self.x[:,0],self.y[:,0], self.z[:,0],label='Simulação')"""
+        ax[1].plot(self.t[:-1], self.errosFormacao[0,:], '--', label="Erro rhof")        
+        ax[1].plot(self.t[:-1], self.errosFormacao[1,:], '-*', label="Erro betaf")        
+        ax[1].plot(self.t[:-1], self.errosFormacao[2,:], 'o-', label="Erro alphaf")
+        ax[1].set_title("Erros de formação")
 
-        plt.plot(self.t[:-1], self.erro[0,:], label="Erro X")        
-        plt.plot(self.t[:-1], self.erro[1,:], label="Erro Y")        
-        plt.plot(self.t[:-1], self.erro[2,:], label="Erro Z")
-        plt.title("Erros de posicionamento")
-        plt.legend()      
+        ef = open('errosFormacao.txt', 'a+')
+        epos = open('errosPosicao.txt', 'a+')
+        for i in range(0, len(self.errosFormacao)):
+            erroForma = "%s,%s,%s\n"%(self.errosFormacao[0,i],self.errosFormacao[1,i],self.errosFormacao[2,i])
+            erroPosic = "%s,%s,%s\n"%(self.erro[0,i],self.erro[1,i],self.erro[2,i])
+            ef.write(erroForma)
+            epos.write(erroPosic)     
+
+        ef.close()
+        epos.close()
+        fig.legend()
+        
         plt.show()
                 
     
