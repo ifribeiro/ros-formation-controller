@@ -10,6 +10,7 @@ import matplotlib as mpl
 import numpy as np
 import rospy
 import math
+import tf
 
 
 class Controller:
@@ -114,9 +115,13 @@ class Controller:
         self.U = {}
         self.ganho = 0.4
 
-        self.odom_drone = (0, 0, 1, 0)
+        #(x, y, z, psi, vel_x, vel_y, velz)
+        self.odom_drone = (0, 0, 1, 0, 0, 0 )
+        
+        
         self.old_odom_drone = (0,0,1,0)
-
+        
+        #(x, y, z, psi, vel_x, vel_y, velz)
         self.odom_drone2 = (1, 1, 1, 0)
 
         self.a=0.2
@@ -149,13 +154,27 @@ class Controller:
         
         self.old_odom_drone = self.odom_drone
 
+        #Posição
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
-        psi = msg.pose.pose.orientation.z
+        
+        #Orientação em Quartenos
+        xQ = msg.pose.pose.orientation.x
+        yQ = msg.pose.pose.orientation.y
+        zQ = msg.pose.pose.orientation.z
+        wQ = msg.pose.pose.orientation.w
+        quaterno = (xQ, yQ, zQ, wQ)
+        euler = tf.transformations.euler_from_quaternion(quaterno)
+        #Orientação
+        psi = euler[2]
+
+        vel_x = msg.twist.twist.linear
+        vel_y = msg.twist.twist.linear
+        vel_z = msg.twist.twist.linear
 
         #atualiza o valor da odometria
-        self.odom_drone = (x, y, z, psi)
+        self.odom_drone = (x, y, z, psi, vel_x, vel_y, vel_z)
 
         #verifica se a odometria mudou
         if(self.old_odom_drone != self.odom_drone):
@@ -172,9 +191,23 @@ class Controller:
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
-        psi = msg.pose.pose.orientation.z
 
-        self.odom_drone2 = (x, y, z, psi)
+        #Orientação em Quartenos
+        xQ = msg.pose.pose.orientation.x
+        yQ = msg.pose.pose.orientation.y
+        zQ = msg.pose.pose.orientation.z
+        wQ = msg.pose.pose.orientation.w
+        quaterno = (xQ, yQ, zQ, wQ)
+        euler = tf.transformations.euler_from_quaternion(quaterno)
+        #Orientação
+        psi = euler[2]
+
+        vel_x = msg.twist.twist.linear
+        vel_y = msg.twist.twist.linear
+        vel_z = msg.twist.twist.linear
+
+        #atualiza o valor da odometria
+        self.odom_drone = (x, y, z, psi, vel_x, vel_y, vel_z)
 
 
     def takeOff(self, drone_name):
