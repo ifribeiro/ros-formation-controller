@@ -89,14 +89,14 @@ class Controller:
         self.k8 = 4.7295    
 
         #kps
-        self.kpx = 1
-        self.kpy = 0.5
-        self.kpz = 0.7
-        self.kpphi = 0.7
-        self.kdx = 0.5
-        self.kdy = 1
-        self.kdz = 0.8
-        self.kdphi = 0.7
+        self.kpx = 0.2
+        self.kpy = 0.2
+        self.kpz = 0.2
+        self.kpphi = 0.2
+        self.kdx = 0.2
+        self.kdy = 0.2
+        self.kdz = 0.2
+        self.kdphi = 0.2
         #kp
         self.kp = np.diag([self.kpx, self.kpy, self.kpz, self.kpphi])
         self.kd = np.diag([self.kdx, self.kdy, self.kdz, self.kdphi])
@@ -242,7 +242,7 @@ class Controller:
         """
 
         pub = self.rospy.Publisher("/%s/land"%(drone_name), Empty, queue_size=10)    
-        rate_10 = self.rospy.Rate(10) # 10hz
+        rate_10 = self.rospy.Rate(20) # 10hz
         self.rospy.loginfo("Landing %s ..."%(drone_name))
         for i in range(1,25):
             pub.publish(Empty())
@@ -415,7 +415,7 @@ class Controller:
             #X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])            
         
             self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
-            self.rospy.wait_for_message('/%s/new_odom'%(self.bebop2_name), Odometry)
+            #self.rospy.wait_for_message('/%s/new_odom'%(self.bebop2_name), Odometry)
             
             """self.odomx[i] = self.odom_drone[0]
             self.odomy[i] = self.odom_drone[1]
