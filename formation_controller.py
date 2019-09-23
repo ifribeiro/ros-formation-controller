@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import math
+import message_filters
 #from scipy import signal
 from numpy import argmax, mean, diff, log, nonzero
 
@@ -30,8 +31,19 @@ class Estimator:
     def initSubscribers(self):
         # --> metodo que vai atualizar dados da mensagem para atributos do objeto
         #self.subvel = self.rospy.Subscriber("/turtle1/pose", Pose, self.get_robot_velocity)
-        self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
+        #self.subOdom = self.rospy.Subscriber('/%s/odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
+        self.subOdom = message_filters.Subscriber("/turtle1/pose", Pose)
+        self.cache = message_filters.Cache(self.subOdom, 5, allow_headerless=True)
+        #self.cache.registerCallback(self.callback)
+
         return
+    
+    def callback(self, data):
+        pose = data
+        x = pose.x
+        y = pose.y 
+        self.pose = (x,y)
+
     def initPublishers(self, bebop1_name):
         self.pubVel = rospy.Publisher('/%s/cmd_vel'%(bebop1_name), Twist, queue_size=10)
         return 
@@ -53,44 +65,7 @@ class Estimator:
         self.altitudeChanged = False
         self.robot_linear_vel=0
         #wflc
-
-        self.omega_0_init = 1
-
-        # self.sum_rec = 0
-        # self.sum_omega_0 = 0
-        # self.harmonics = 0
-        # self.tremor = 0            
-        self.mu_0 = 2*10**(-6)
-        self.mu_1 =  1.5*10**(-3)
-        self.mu_b = 0
-        self.M=1
-        #fle
-        self.mu=0.0018
-        self.sum_omega=0
-        self.harmonics_flc=0
-        self.noise_estimate_flc=np.zeros(2)
-        
-        self.count=0
-        self.count_vec=[]
-        self.R_leg_pose=[]
-        self.L_1000leg_pose=[]
-        self.LD1000D_vector=[]
-        # self.1000Gait_Candence_vector=[]self.angle_min = 0
-        self.an1000gle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.Gait_Amplitude_vector=[]
-        self.angle_min = 0
-        self.angle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.angle_min = 0
-        self.angle_max = 0
-        self.scan_time = 0
-        self.ranges = 0
-        self.Estimated_Human_Linear_Velocity=[]
-        self.Robot_Linear_velocity=[]
-        self.Gait_Candence_vector=[]
+        self.pose = (0,0)
 
     def get_robot_velocity(self,msg):
         robot_linear_vel = msg
@@ -136,26 +111,37 @@ class Estimator:
             pub.publish(Empty())
             rate_10.sleep()
         return True
-    def run(self):        
+    def element(self,msg):
+        print (msg)
 
-        #a execução espera o comando de takeoff finalizar
-        self.takeOff(self.bebop1_name)  
+    def run(self):
+        T_MAX = 20
+        T_CONTROL = 0.2
+
+        t = self.rospy.get_time()
+        t_control = self.rospy.get_time()
+        i = 0       
+
+        while ((self.rospy.get_time()-t) < T_MAX):
+            if ((self.rospy.get_time() - t_control)>T_CONTROL):
+                t_control = self.rospy.get_time()
+                
+                #self.element(self.cache.getElemBeforeTime(self.rospy.Time.now()))
+                stamp = self.cache.getLastestTime()
+                self.element(self.cache.getElemBeforeTime(stamp))
+                i = i+1
+                
         
-        vel_msg = Twist()
+        
 
-        vel_msg.linear.x = 0
-        vel_msg.linear.y = 0
-        vel_msg.linear.z = 0.2
-        vel_msg.angular.x = 0
-        vel_msg.angular.y = 0
-        vel_msg.angular.z = 0
+        """
         while not self.rospy.is_shutdown():
             self.pubVel.publish(vel_msg)
             if (self.change):
                 print (self.x)
             
             self.change=False
-            self.rate.sleep()
+            self.rate.sleep()"""
 
         """
         self.fig = plt.figure(figsize=(18,10))
