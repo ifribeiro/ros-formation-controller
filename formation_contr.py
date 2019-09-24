@@ -7,6 +7,7 @@ from std_msgs.msg import Empty
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import message_filters
 import numpy as np
 import rospy
 import math
@@ -60,12 +61,12 @@ class Controller:
 
         self.bebop1_name = 'B1'
         self.bebop2_name = 'B2'
-        self.rate = self.rospy.Rate(10)
+        self.rate = self.rospy.Rate(5)
         self.Xd = np.transpose([[2, 1, 1.5, 0]])   
         #self.Xd = np.transpose([[8, 5.54, 0, 0]])
 
               
-        self.ti = 0.1
+        self.ti = 0.2
         self.tfinal = 20
         self.t = np.arange(0, self.tfinal, self.ti)
 
@@ -130,6 +131,12 @@ class Controller:
         self.odomy = 0*np.zeros(len(self.t)-1)
         self.odomz = 1*np.zeros(len(self.t)-1)
         self.erro = np.zeros((6,len(self.t)))
+        self.errox = []
+        self.erroy = []
+        self.erroz = []
+        self.errorhof = []
+        self.errobetaf = []
+        self.erroalphaf = []
 
         self.errosFormacao = np.zeros((6,len(self.t)-1))
 
@@ -165,7 +172,7 @@ class Controller:
         zQ = msg.pose.pose.orientation.z
         wQ = msg.pose.pose.orientation.w
 
-        quaterno = (wQ,xQ, yQ, zQ)
+        quaterno = (xQ, yQ, zQ, wQ)
         euler = tf.transformations.euler_from_quaternion(quaterno)
         #Orientação
         psi = euler[2]
@@ -200,7 +207,7 @@ class Controller:
         yQ = msg.pose.pose.orientation.y
         zQ = msg.pose.pose.orientation.z
         wQ = msg.pose.pose.orientation.w
-        quaterno = (wQ, xQ, yQ, zQ)
+        quaterno = (xQ, yQ, zQ, wQ)
         euler = tf.transformations.euler_from_quaternion(quaterno)
         #Orientação
         psi = euler[2]
@@ -210,10 +217,10 @@ class Controller:
         vel_z = msg.twist.twist.linear.z
 
         #atualiza o valor da odometria
-        self.odom_drone = (x, y, z, psi, vel_x, vel_y, vel_z)
+        self.odom_drone2 = (x, y, z, psi, vel_x, vel_y, vel_z)
 
 
-    def takeOff(self, drone_name):
+    def takeOff(self, drone_name1, drone_name2):
 
         """
         Inicia o vôo do drone
@@ -223,11 +230,15 @@ class Controller:
 
         """
 
-        pub = self.rospy.Publisher("/%s/takeoff"%(drone_name), Empty, queue_size=10)    
-        rate_10 = self.rospy.Rate(10) # 10hz
-        self.rospy.loginfo("Taking Off %s ..."%(drone_name))
+        pub1 = self.rospy.Publisher("/%s/takeoff"%(drone_name1), Empty, queue_size=10)    
+        pub2 = self.rospy.Publisher("/%s/takeoff"%(drone_name2), Empty, queue_size=10)
+
+        rate_10 = self.rospy.Rate(5) # 10hz
+        self.rospy.loginfo("Taking Off %s ..."%(drone_name1))
+        self.rospy.loginfo("Taking Off %s ..."%(drone_name2))
         for i in range(1,25):
-            pub.publish(Empty())
+            pub1.publish(Empty())
+            pub2.publish(Empty())
             rate_10.sleep()
         self.rospy.loginfo("Feito.")
         return True
@@ -242,61 +253,13 @@ class Controller:
         """
 
         pub = self.rospy.Publisher("/%s/land"%(drone_name), Empty, queue_size=10)    
-        rate_10 = self.rospy.Rate(20) # 10hz
+        rate_10 = self.rospy.Rate(5) # 10hz
         self.rospy.loginfo("Landing %s ..."%(drone_name))
         for i in range(1,25):
             pub.publish(Empty())
             rate_10.sleep()
         self.rospy.loginfo("Feito.")
         return True
-        
-
-    def controlePosicionamento(self,X=None, Xd=None,Xtil=None, j=None, phi = None):
-        """
-        Realiza o controle de posicionamento do drone
-        Parametros:
-        Xd = Coordenadas da posição desejada
-        Xtil = Erros entre a posição desejada e a atual
-        j = incremento do tempo
-        phi = Orientação do drone
-
-        """
-
-        f1 = [  
-            [(self.k1)*(math.cos(phi[j])),(-self.k3)*(math.sin(phi[j])), 0, 0],
-            [(self.k1)*math.sin(phi[j]), self.k3*math.cos(phi[j]), 0, 0],
-            [0, 0, self.k5, 0],
-            [0, 0, 0, self.k7]]
-
-        f1_inv = np.linalg.inv(f1)        
-        xd_x_to = Xd*self.ti        
-        kd_Xtil = self.kd.dot(Xtil)
-        tanh_kd_Xtil = np.transpose([np.array([math.tanh(xi) for xi in kd_Xtil])])                
-        part3 = self.kp.dot(tanh_kd_Xtil)        
-        xd_kp = xd_x_to + part3
-        
-        self.U[j] = ((f1_inv).dot(xd_kp))*self.ganho
-
-        Ku_inv = np.linalg.inv(self.ku)
-
-        
-        Uponto = (self.U[j]-self.U[j-1])/self.ti
-
-        Xponto = X - self.Xb1[:,j]
-        
-
-        print ("-----\n")
-        print (Xponto,"\n")
-        #print (X.shape,"\n")
-        #print (self.X[:,j].shape)
-        print ("-----\n")
-        #print (Uponto[j][0][0], Uponto[j][0][0], Uponto[j][0][0]  )
-
-
-
-
-
-        return self.U
 
     def controleFormacao(self, j=None, odomx=None, odomy=None, odomz=None, odompsi=None, odomx2=None, odomy2=None, odomz2=None, odompsi2=None):
         """
@@ -309,18 +272,6 @@ class Controller:
         Retorna: a velocidade que deve ser aplicada ao segundo drone
 
         """
-
-        self.Xb1[0,j] = odomx
-        self.Xb1[1,j] = odomy
-        self.Xb1[2,j] = odomz
-        self.Xb1[3,j] = odompsi
-
-        self.Xb2[0,j] = odomx2
-        self.Xb2[1,j] = odomy2
-        self.Xb2[2,j] = odomz2
-        self.Xb2[3,j] = odompsi2
-
-
         xf = odomx
         yf = odomy
         zf = odomz
@@ -339,18 +290,22 @@ class Controller:
 
         #qtil
         qtil = self.qdes - np.transpose(q)
-        
-        #print ("-------")
-        #print (qtil)
-        #print ("-------")
 
-        self.erro[0,j] = qtil[0,]
+        
+        self.errox.append(qtil[0,])
+        self.erroy.append(qtil[1,])
+        self.erroz.append(qtil[2,])
+
+        self.errorhof.append(qtil[3,])
+        self.errobetaf.append(qtil[4,])
+        self.erroalphaf.append(qtil[5,])
+        """
         self.erro[1,j] = qtil[1,]
         self.erro[2,j] = qtil[2,]
 
         self.erro[3,j] = qtil[3,]
         self.erro[4,j] = qtil[4,]
-        self.erro[5,j] = qtil[5,]
+        self.erro[5,j] = qtil[5,]"""
 
 
         #Matriz de ganhos
@@ -395,52 +350,45 @@ class Controller:
     def run(self):        
 
         #a execução espera o comando de takeoff finalizar
-        self.takeOff(self.bebop1_name) 
-        self.rospy.sleep(2)       
-        self.takeOff(self.bebop2_name)
-        self.rospy.sleep(2)
-        #self.rospy.sleep(2)
-        #self.goToInitialPositionDrone2(bebop_name=self.bebop2_name, xd=-2, yd=1, zd=0.75, phi=0)
-        #self.rospy.sleep(2)
-        #self.goToInitialPositionDrone1(bebop_name=self.bebop1_name, xd=0, yd=0, zd=0.75, phi=0)
-        
-
-
+        self.takeOff(self.bebop1_name, self.bebop2_name)
+        self.rospy.sleep(3)
         #print(self.t)
         vel_msg = Twist()
         vel_msg2 = Twist()
         
         self.rospy.loginfo("Iniciando a formação...")
-        for i in range(0,len(self.t)):
-            #X = np.transpose([[self.odom_drone[0] , self.odom_drone[1], self.odom_drone[2], self.odom_drone[3]]])            
-        
-            self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
-            #self.rospy.wait_for_message('/%s/new_odom'%(self.bebop2_name), Odometry)
-            
-            """self.odomx[i] = self.odom_drone[0]
-            self.odomy[i] = self.odom_drone[1]
-            self.odomz[i] = self.odom_drone[2]"""
-            U = self.controleFormacao(j=i, odomx=self.odom_drone[0],odomy=self.odom_drone[1],odomz=self.odom_drone[2],odompsi=self.odom_drone[3],
-            odomx2=self.odom_drone2[0], odomy2=self.odom_drone2[1],odomz2=self.odom_drone2[2], odompsi2 = self.odom_drone2[3])            
-            
-            vel_msg.linear.x = U[0]
-            vel_msg.linear.y = U[1]
-            vel_msg.linear.z = U[2]
+        self.rospy.sleep(2)
 
-            vel_msg2.linear.x = U[3]
-            vel_msg2.linear.y = U[4]
-            vel_msg2.linear.z = U[5]
-            print (U)
-            if not self.rospy.is_shutdown():                
-                self.pubVel.publish(vel_msg)
-                self.pubVel2.publish(vel_msg2)
-            self.rate.sleep()
+        T_MAX = 20
+        T_CONTROL = 0.2
 
+        t = self.rospy.get_time()
+        t_control = self.rospy.get_time()
+        i = 0
+        self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
+        while ((self.rospy.get_time()-t) < T_MAX):
+            if ((self.rospy.get_time() - t_control) > T_CONTROL):            
+                U = self.controleFormacao(j=i, odomx=self.odom_drone[0],odomy=self.odom_drone[1],odomz=self.odom_drone[2],odompsi=self.odom_drone[3],
+                odomx2=self.odom_drone2[0], odomy2=self.odom_drone2[1],odomz2=self.odom_drone2[2], odompsi2 = self.odom_drone2[3])
+                
+                vel_msg.linear.x = U[0]
+                vel_msg.linear.y = U[1]
+                vel_msg.linear.z = U[2]
+
+                vel_msg2.linear.x = U[3]
+                vel_msg2.linear.y = U[4]
+                vel_msg2.linear.z = U[5]
+
+                if not self.rospy.is_shutdown():                
+                    self.pubVel.publish(vel_msg)
+                    self.pubVel2.publish(vel_msg2)
+                t_control = self.rospy.get_time()                
+                i = i + 1
         
         #mpl.rcParams['legend.fontsize'] = 10
         self.rospy.loginfo("Formação finalizada.")
-
-        
+        self.rospy.loginfo("Tamanho t %s "%(len(self.t)))
+        self.rospy.loginfo("Tamanho i %s "%(i))
         self.land(self.bebop1_name)
         self.land(self.bebop2_name)
 
@@ -463,14 +411,14 @@ class Controller:
         fig, ax = plt.subplots(2)
         fig.set_figheight(20)
         fig.set_figwidth(20)
-        ax[0].plot(self.t[:], self.erro[0,:], label="Erro X", )        
-        ax[0].plot(self.t[:], self.erro[1,:], label="Erro Y")        
-        ax[0].plot(self.t[:], self.erro[2,:], label="Erro Z")
+        ax[0].plot(self.t[:95], self.errox[:95], label="Erro X", )        
+        ax[0].plot(self.t[:95], self.erroy[:95], label="Erro Y")        
+        ax[0].plot(self.t[:95], self.erroz[:95], label="Erro Z")
         ax[0].set_title("Erros de posicionamento")
 
-        ax[1].plot(self.t[:], self.erro[3,:], '--', label="Erro rhof")        
-        ax[1].plot(self.t[:], self.erro[4,:], '*-', label="Erro betaf")        
-        ax[1].plot(self.t[:], self.erro[5,:], 'o-', label="Erro alphaf")
+        ax[1].plot(self.t[:95], self.errorhof[:95], '--', label="Erro rhof")        
+        ax[1].plot(self.t[:95], self.errobetaf[:95], '--', label="Erro betaf")        
+        ax[1].plot(self.t[:95], self.erroalphaf[:95], '--', label="Erro alphaf")
         ax[1].set_title("Erros de formacao")
 
         ef = open('errosFormacao.txt', 'a+')
