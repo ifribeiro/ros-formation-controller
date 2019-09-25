@@ -1,5 +1,6 @@
 #! /usr/bin/env python2
 # -*- coding: utf-8 -*-
+#from __future__ import unicode_literals
 from mpl_toolkits.mplot3d import Axes3D
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -299,13 +300,6 @@ class Controller:
         self.errorhof.append(qtil[3,])
         self.erroalphaf.append(qtil[4,])
         self.errobetaf.append(qtil[5,])
-        """
-        self.erro[1,j] = qtil[1,]
-        self.erro[2,j] = qtil[2,]
-
-        self.erro[3,j] = qtil[3,]
-        self.erro[4,j] = qtil[4,]
-        self.erro[5,j] = qtil[5,]"""
 
 
         #Matriz de ganhos
@@ -366,11 +360,12 @@ class Controller:
         t_control = self.rospy.get_time()
         i = 0
         self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
+        
         while ((self.rospy.get_time()-t) < T_MAX):
             if ((self.rospy.get_time() - t_control) > T_CONTROL):            
                 U = self.controleFormacao(j=i, odomx=self.odom_drone[0],odomy=self.odom_drone[1],odomz=self.odom_drone[2],odompsi=self.odom_drone[3],
                 odomx2=self.odom_drone2[0], odomy2=self.odom_drone2[1],odomz2=self.odom_drone2[2], odompsi2 = self.odom_drone2[3])
-                
+                print (U.shape)
                 vel_msg.linear.x = U[0]
                 vel_msg.linear.y = U[1]
                 vel_msg.linear.z = U[2]
@@ -421,16 +416,6 @@ class Controller:
         ax[1].plot(self.t[:i], self.erroalphaf[:], '--', label="Erro alphaf")
         ax[1].set_title("Erros de formacao")
 
-        ef = open('errosFormacao.txt', 'a+')
-        epos = open('errosPosicao.txt', 'a+')
-        for i in range(0, len(self.errosFormacao)):
-            erroForma = "%s,%s,%s\n"%(self.errosFormacao[0,i],self.errosFormacao[1,i],self.errosFormacao[2,i])
-            erroPosic = "%s,%s,%s\n"%(self.erro[0,i],self.erro[1,i],self.erro[2,i])
-            ef.write(erroForma)
-            epos.write(erroPosic)     
-
-        ef.close()
-        epos.close()
         fig.legend()
         
         plt.show()
