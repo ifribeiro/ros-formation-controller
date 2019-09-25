@@ -172,7 +172,7 @@ class Controller:
         zQ = msg.pose.pose.orientation.z
         wQ = msg.pose.pose.orientation.w
 
-        quaterno = (xQ, yQ, zQ, wQ)
+        quaterno = (wQ, xQ, yQ, zQ)
         euler = tf.transformations.euler_from_quaternion(quaterno)
         #Orientação
         psi = euler[2]
@@ -207,7 +207,7 @@ class Controller:
         yQ = msg.pose.pose.orientation.y
         zQ = msg.pose.pose.orientation.z
         wQ = msg.pose.pose.orientation.w
-        quaterno = (xQ, yQ, zQ, wQ)
+        quaterno = (wQ, xQ, yQ, zQ)
         euler = tf.transformations.euler_from_quaternion(quaterno)
         #Orientação
         psi = euler[2]
@@ -286,7 +286,7 @@ class Controller:
         betaf = math.atan2((odomz2 - odomz), math.sqrt((odomx2 - odomx)**2 + (odomy2 - odomy)**2))
 
         #q
-        q = np.array([xf, yf, zf, rhof, betaf, alphaf])
+        q = np.array([xf, yf, zf, rhof, alphaf, betaf])
 
         #qtil
         qtil = self.qdes - np.transpose(q)
@@ -297,8 +297,8 @@ class Controller:
         self.erroz.append(qtil[2,])
 
         self.errorhof.append(qtil[3,])
-        self.errobetaf.append(qtil[4,])
-        self.erroalphaf.append(qtil[5,])
+        self.erroalphaf.append(qtil[4,])
+        self.errobetaf.append(qtil[5,])
         """
         self.erro[1,j] = qtil[1,]
         self.erro[2,j] = qtil[2,]
@@ -411,14 +411,14 @@ class Controller:
         fig, ax = plt.subplots(2)
         fig.set_figheight(20)
         fig.set_figwidth(20)
-        ax[0].plot(self.t[:95], self.errox[:95], label="Erro X", )        
-        ax[0].plot(self.t[:95], self.erroy[:95], label="Erro Y")        
-        ax[0].plot(self.t[:95], self.erroz[:95], label="Erro Z")
+        ax[0].plot(self.t[:i], self.errox[:], label="Erro X", )        
+        ax[0].plot(self.t[:i], self.erroy[:], label="Erro Y")        
+        ax[0].plot(self.t[:i], self.erroz[:], label="Erro Z")
         ax[0].set_title("Erros de posicionamento")
 
-        ax[1].plot(self.t[:95], self.errorhof[:95], '--', label="Erro rhof")        
-        ax[1].plot(self.t[:95], self.errobetaf[:95], '--', label="Erro betaf")        
-        ax[1].plot(self.t[:95], self.erroalphaf[:95], '--', label="Erro alphaf")
+        ax[1].plot(self.t[:i], self.errorhof[:], '--', label="Erro rhof")        
+        ax[1].plot(self.t[:i], self.errobetaf[:], '--', label="Erro betaf")        
+        ax[1].plot(self.t[:i], self.erroalphaf[:], '--', label="Erro alphaf")
         ax[1].set_title("Erros de formacao")
 
         ef = open('errosFormacao.txt', 'a+')
