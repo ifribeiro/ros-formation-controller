@@ -90,8 +90,9 @@ def controleFormacao(odom_d1=[], odom_d2=[], qdes=None):
         F1 = np.linalg.inv(F1)
         F2 = np.linalg.inv(F2)
 
-        
-        v1 = F1.dot(xrefp)
+        vd1 = np.append(xrefp[:3,], 0)
+        v1 = F1.dot(vd1)
+        print (vd1)
 
         vel = np.array([odom_d1[4], odom_d1[5], odom_d1[6], odom_d1[7], odom_d2[4], odom_d2[5], odom_d2[6], odom_d2[7]])
 
