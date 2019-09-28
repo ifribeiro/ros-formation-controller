@@ -20,8 +20,7 @@ class Controller:
     def __init__(self):
         self.rospy=rospy
         self.rospy.init_node('listener',anonymous=True)
-        self.rospy.loginfo("Iniciando o controle de formação") #" starting controle de formacao de drones"
-        # self.initParameters()        
+        self.rospy.loginfo("Iniciando o controle de formação") #" starting controle de formacao de drones"        
         self.initvariables() # inicializacao de variaveis
         self.initSubscribers() # topicos a serem subscritos por ex odometria
         self.initPublishers(self.bebop1_name, self.bebop2_name)
@@ -32,10 +31,8 @@ class Controller:
         """
         Inicia os Subscribers dos tópicos do ROS
         """
-
-        self.subOdom = self.rospy.Subscriber('/%s/new_odom'%(self.bebop1_name), Odometry, self.get_drone_odom)
+        self.subOdom = self.rospy.Subscriber('/%s/new_odom'%(self.bebop1_name), Odometry, self.get_drone1_odom)
         self.subOdom2 = self.rospy.Subscriber('/%s/new_odom'%(self.bebop2_name), Odometry, self.get_drone2_odom)
-
         return
 
     def initPublishers(self, bebop1_name, bebop2_name):
@@ -65,16 +62,13 @@ class Controller:
         self.bebop2_name = 'B2'
         self.rate = self.rospy.Rate(5)
         self.Xd = np.transpose([[2, 1, 1.5, 0]])   
-        #self.Xd = np.transpose([[8, 5.54, 0, 0]])
-
-              
+                      
         self.ti = 0.2
         self.tfinal = 20
         self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
-        self.qdes = np.transpose([2, 1, 1.5, 1, 0, 0])
-        #self.qdes = np.transpose([[8, 5.54, 0, 1, 0, 0]])
+        self.qdes = np.transpose([2, 1, 1.5, 1, 0, 0])        
         
         self.qtil = np.zeros((6, len(self.t)))
 
@@ -115,23 +109,15 @@ class Controller:
         self.y = 0*np.ones((len(self.t),1))
         self.z = np.ones((len(self.t),1))
         self.phi = np.zeros((len(self.t),1))
-        self.U = {}
-        self.ganho = 0.4
+        self.U = {}      
 
         #(x, y, z, psi, vel_x, vel_y, velz)
-        self.odom_drone1 = (0, 0, 0, 0, 0, 0 )
-        
-        
-        self.old_odom_drone = (0,0,1,0,0,0,0)
+        self.odom_drone1 = (0, 0, 0, 0, 0, 0 )      
         
         #(x, y, z, psi, vel_x, vel_y, velz)
         self.odom_drone2 = (0, -1, 0, 0, 0, 0,0)
 
-        self.a=0.2
-        self.v = {}
-        self.odomx = 0*np.ones(len(self.t)-1)
-        self.odomy = 0*np.zeros(len(self.t)-1)
-        self.odomz = 1*np.zeros(len(self.t)-1)
+        self.v = {}        
         self.erro = np.zeros((6,len(self.t)))
         self.errox = []
         self.erroy = []
@@ -146,25 +132,16 @@ class Controller:
         #Drone2
 
         #initial position Drone2
-        self.xi = np.transpose([[-2, 1, 0.75, 0]])  
-
-        self.x2 = -2*np.ones((len(self.t), 1))
-        self.y2 = 1*np.ones((len(self.t), 1))
-        self.z2 = 0.75*np.ones((len(self.t),1))
-        self.phi2 = np.zeros((len(self.t),1))
         self.Vd1A = np.transpose([0, 0, 0, 0])
         self.Vd2A = np.transpose([0, 0, 0, 0])
 
-    def get_drone_odom(self, msg):
+    def get_drone1_odom(self, msg):
 
         """
-        Atualiza a odometria do Drone 1
+        Atualiza a odometria do drone 1
         Parametros: 
         msg = Mensagem recebida do tópico
         """
-        
-        self.old_odom_drone = self.odom_drone1
-
         #Posição
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
@@ -188,17 +165,13 @@ class Controller:
 
         #atualiza o valor da odometria
         self.odom_drone1 = (x, y, z, psi, vel_x, vel_y, vel_z, velAngZ)
-
-        #verifica se a odometria mudou
-        if(self.old_odom_drone != self.odom_drone1):
-            self.change = True
         return
 
 
 
     def get_drone2_odom(self,msg):
         """
-        Atualiza a odometria do Drone 2
+        Atualiza a odometria do drone 2
         Parametros: 
         msg = Mensagem recebida do tópico
         """
@@ -232,8 +205,8 @@ class Controller:
         Inicia o vôo do drone
 
         Parametros: 
-        drone_name = Nome do drone
-
+        drone_name1 = Nome do drone 1
+        drone_name2 = Nome do drone 2
         """
 
         pub1 = self.rospy.Publisher("/%s/takeoff"%(drone_name1), Empty, queue_size=10)    
@@ -272,10 +245,10 @@ class Controller:
         Realiza o controle de formação
 
         Parâmetros:
-        odomx,odomy,odomz,odomphi = Odometria do drone líder da formação
-        odomx2,odomy2,odomz2 = Odometria do segundo drone da formação
-
-        Retorna: a velocidade que deve ser aplicada ao segundo drone
+        t = tempo de execução
+        odom_drone1 = Odometria do drone 1
+        odom_drone2 = Odometria do drone 2
+        Retorna: controles do drone 1 e 2
 
         """
 
@@ -338,13 +311,13 @@ class Controller:
 
 
         xrefp = jacob.dot(qrefp)
-        
+        #Cinemática direta Drone 1
         F1 = np.array([
             [math.cos(odompsi), -math.sin(odompsi), 0, 0],
             [math.sin(odompsi), math.cos(odompsi), 0, 0],
             [0,     0,      1,      0],
             [0,     0,      0,      1]])
-
+        #Cinemática direta Drone 2
         F2 = np.array([
             [math.cos(odompsi2), -math.sin(odompsi2), 0, 0],
             [math.sin(odompsi2), math.cos(odompsi2), 0, 0],
@@ -378,11 +351,10 @@ class Controller:
         return (Ud1, Ud2)
 
     def run(self):        
-
-        #a execução espera o comando de takeoff finalizar
+        
         self.takeOff(self.bebop1_name, self.bebop2_name)
         self.rospy.sleep(3)
-        #print(self.t)
+        
         vel_msg = Twist()
         vel_msg2 = Twist()
         
@@ -391,20 +363,24 @@ class Controller:
 
         T_MAX = 20
         T_CONTROL = 0.2
-
         t = self.rospy.get_time()
         t_incB = self.rospy.get_time()
         t_control = self.rospy.get_time()
         i = 0
+
+        #Sincroniza com o drone 1
         self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
         
         while ((self.rospy.get_time()-t) < T_MAX):
             if ((self.rospy.get_time() - t_control) > T_CONTROL):            
-                U = self.controleFormacao(j=i, t=t_incB, odom_drone1=self.odom_drone1, odom_drone2=self.odom_drone2)                
+                U = self.controleFormacao(j=i, t=t_incB, odom_drone1=self.odom_drone1, odom_drone2=self.odom_drone2)
+
+                #Velocidade drone1
                 vel_msg.linear.x = U[0][0]
                 vel_msg.linear.y = U[0][1]
                 vel_msg.linear.z = U[0][2]
 
+                #Velocidade drone2
                 vel_msg2.linear.x = U[1][0]
                 vel_msg2.linear.y = U[1][1]
                 vel_msg2.linear.z = U[1][2]
@@ -414,31 +390,16 @@ class Controller:
                     self.pubVel2.publish(vel_msg2)
                 t_control = self.rospy.get_time()
                 t_incB = self.rospy.get_time()                
-                i = i + 1
+                i = i + 1        
         
-        #mpl.rcParams['legend.fontsize'] = 10
-        self.rospy.loginfo("Formação finalizada.")
-        self.rospy.loginfo("Tamanho t %s "%(len(self.t)))
-        self.rospy.loginfo("Tamanho i %s "%(i))
+        self.rospy.loginfo("Formação finalizada.")        
         self.land(self.bebop1_name)
         self.land(self.bebop2_name)
 
-        """erros = plt.figure(1)
-        errosFormacao = plt.figure(2)
-        ax1 = erros.add_subplot(111)
-        ax2 = errosFormacao.add_subplot(111)
+        """
+        Plotagem dos erros de posição e formação
+        """
 
-        ax1.plot(self.t[:-1], self.erro[0,:], label="Erro X")        
-        ax1.plot(self.t[:-1], self.erro[1,:], label="Erro Y")        
-        ax1.plot(self.t[:-1], self.erro[2,:], label="Erro Z")
-        ax1.set_title("Erros de posicionamento")
-        erros.show()
-        
-        ax2.plot(self.t[:-1], self.errosFormacao[0,:], label="Erro Form. X")        
-        ax2.plot(self.t[:-1], self.errosFormacao[1,:], label="Erro Form. Y")        
-        ax2.plot(self.t[:-1], self.errosFormacao[2,:], label="Erro Form. Z")
-        ax2.set_title("Erros de Formação")
-        errosFormacao.show()"""
         fig, ax = plt.subplots(2)
         fig.set_figheight(20)
         fig.set_figwidth(20)
@@ -451,9 +412,7 @@ class Controller:
         ax[1].plot(self.t[:i], self.errobetaf[:], '--', label="Erro betaf")        
         ax[1].plot(self.t[:i], self.erroalphaf[:], '--', label="Erro alphaf")
         ax[1].set_title("Erros de formacao")
-
-        fig.legend()
-        
+        fig.legend()        
         plt.show()
                 
     
