@@ -1,6 +1,6 @@
 #! /usr/bin/env python2
 # -*- coding: utf-8 -*-
-#from __future__ import unicode_literals
+from __future__ import unicode_literals
 from mpl_toolkits.mplot3d import Axes3D
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -20,7 +20,7 @@ class Controller:
     def __init__(self):
         self.rospy=rospy
         self.rospy.init_node('listener',anonymous=True)
-        self.rospy.loginfo("Iniciando o controle de formação") #" starting controle de formacao de drones"        
+        self.rospy.loginfo("Iniciando o controle de formacao") #" starting controle de formacao de drones"        
         self.initvariables() # inicializacao de variaveis
         self.initSubscribers() # topicos a serem subscritos por ex odometria
         self.initPublishers(self.bebop1_name, self.bebop2_name)
@@ -358,7 +358,7 @@ class Controller:
         vel_msg = Twist()
         vel_msg2 = Twist()
         
-        self.rospy.loginfo("Iniciando a formação...")
+        self.rospy.loginfo("Iniciando a formacao...")
         self.rospy.sleep(2)
 
         T_MAX = 20
@@ -384,7 +384,6 @@ class Controller:
                 vel_msg2.linear.x = U[1][0]
                 vel_msg2.linear.y = U[1][1]
                 vel_msg2.linear.z = U[1][2]
-
                 if not self.rospy.is_shutdown():                
                     self.pubVel.publish(vel_msg)
                     self.pubVel2.publish(vel_msg2)
@@ -392,13 +391,13 @@ class Controller:
                 t_incB = self.rospy.get_time()                
                 i = i + 1        
         
-        self.rospy.loginfo("Formação finalizada.")        
+        self.rospy.loginfo("Formacao finalizada.")        
         self.land(self.bebop1_name)
         self.land(self.bebop2_name)
 
         """
         Plotagem dos erros de posição e formação
-        """
+        
 
         fig, ax = plt.subplots(2)
         fig.set_figheight(20)
@@ -411,8 +410,54 @@ class Controller:
         ax[1].plot(self.t[:i], self.errorhof[:], '--', label="Erro rhof")        
         ax[1].plot(self.t[:i], self.errobetaf[:], '--', label="Erro betaf")        
         ax[1].plot(self.t[:i], self.erroalphaf[:], '--', label="Erro alphaf")
-        ax[1].set_title("Erros de formacao")
-        fig.legend()        
+        ax[1].set_title("Erros de formacao")"""
+
+        fig_x = plt.figure(1)
+        fig_y = plt.figure(2)
+        fig_z = plt.figure(3)
+
+        fig_rho = plt.figure(4)
+        fig_alpha = plt.figure(5)
+        fig_beta = plt.figure(6)
+
+        ax_x = fig_x.add_subplot(111)
+        ax_x.plot(self.t[:i], self.errox[:], label="Erro X", color="red")
+        ax_x.set_title("Erros de posicionamento")
+        ax_x.set_xlabel("Tempo de execução (s)")
+        ax_x.set_xlabel("Tempo de execução (s)")
+        ax_x.set_ylabel("Erro (m)")
+
+        ax_y = fig_y.add_subplot(111)
+        ax_y.plot(self.t[:i], self.erroy[:], color="orange")
+        ax_y.set_title("Erros de posicionamento y")
+        ax_y.set_xlabel("Tempo de execução (s)")
+        ax_y.set_ylabel("Erro (m)")
+
+
+        ax_z = fig_z.add_subplot(111)
+        ax_z.plot(self.t[:i], self.erroz[:], color="green")
+        ax_z.set_title("Erros de posicionamento z")
+        ax_z.set_xlabel("Tempo de execução (s)")
+        ax_z.set_ylabel("Erro (m)")
+
+        ax_rho = fig_rho.add_subplot(111)
+        ax_rho.plot(self.t[:i], self.errorhof[:], color="magenta")
+        ax_rho.set_title("Erros de posicionamento rho")
+        ax_rho.set_xlabel("Tempo de execução (s)")
+        ax_rho.set_ylabel("Erro (m)")
+
+        ax_alpha = fig_alpha.add_subplot(111)
+        ax_alpha.plot(self.t[:i], self.erroalphaf[:], color="sandybrown")
+        ax_alpha.set_title("Erros de posicionamento alpha")
+        ax_alpha.set_xlabel("Tempo de execução (s)")
+        ax_alpha.set_ylabel("Erro (m)")
+
+        ax_beta = fig_beta.add_subplot(111)
+        ax_beta.plot(self.t[:i], self.errobetaf[:], color="cyan")
+        ax_beta.set_title("Erros de posicionamento beta")
+        ax_beta.set_xlabel("Tempo de execução (s)")
+        ax_beta.set_ylabel("Erro (m)")
+        plt.legend()
         plt.show()
                 
     
