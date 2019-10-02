@@ -5,6 +5,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
+from sensor_msgs.msg import Joy
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -33,6 +34,7 @@ class Controller:
         """
         self.subOdom = self.rospy.Subscriber('/%s/new_odom'%(self.bebop1_name), Odometry, self.get_drone1_odom)
         self.subOdom2 = self.rospy.Subscriber('/%s/new_odom'%(self.bebop2_name), Odometry, self.get_drone2_odom)
+        self.subJoy = self.rospy.Subscriber("/joy", Joy, self.updateJoyParams)
         return
 
     def initPublishers(self, bebop1_name, bebop2_name):
@@ -112,10 +114,10 @@ class Controller:
         self.U = {}      
 
         #(x, y, z, psi, vel_x, vel_y, velz)
-        self.odom_drone1 = (0, 0, 0, 0, 0, 0 )      
+        self.odom_drone1 = (0, 0, 0, 0, 0, 0, 0, 0)      
         
         #(x, y, z, psi, vel_x, vel_y, velz)
-        self.odom_drone2 = (0, -1, 0, 0, 0, 0,0)
+        self.odom_drone2 = (0, -1, 0, 0, 0, 0, 0, 0)
 
         self.v = {}        
         self.erro = np.zeros((6,len(self.t)))
@@ -134,6 +136,9 @@ class Controller:
         #initial position Drone2
         self.Vd1A = np.transpose([0, 0, 0, 0])
         self.Vd2A = np.transpose([0, 0, 0, 0])
+        self.axes = [-0.0, 0.0, 1.0, -0.0, -0.0, 1.0, 0.0, 0.0]
+        self.axes_default = [-0.0, 0.0, 1.0, -0.0, -0.0, 1.0, 0.0, 0.0]
+        self.landButton = 0
 
     def get_drone1_odom(self, msg):
 
@@ -168,6 +173,10 @@ class Controller:
         return
 
 
+    def updateJoyParams(self, msg):
+        self.axes[:] = msg.axes[:]
+        self.landButton = msg.buttons[0]           
+        return         
 
     def get_drone2_odom(self,msg):
         """
@@ -353,7 +362,7 @@ class Controller:
     def run(self):        
         
         self.takeOff(self.bebop1_name, self.bebop2_name)
-        self.rospy.sleep(3)
+        self.rospy.sleep(10)
         
         vel_msg = Twist()
         vel_msg2 = Twist()
@@ -361,7 +370,7 @@ class Controller:
         self.rospy.loginfo("Iniciando a formacao...")
         self.rospy.sleep(2)
 
-        T_MAX = 20
+        T_MAX = 60
         T_CONTROL = 0.2
         t = self.rospy.get_time()
         t_incB = self.rospy.get_time()
@@ -369,7 +378,7 @@ class Controller:
         i = 0
 
         #Sincroniza com o drone 1
-        self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
+        #self.rospy.wait_for_message('/%s/new_odom'%(self.bebop1_name), Odometry)
         
         while ((self.rospy.get_time()-t) < T_MAX):
             if ((self.rospy.get_time() - t_control) > T_CONTROL):            
@@ -384,12 +393,29 @@ class Controller:
                 vel_msg2.linear.x = U[1][0]
                 vel_msg2.linear.y = U[1][1]
                 vel_msg2.linear.z = U[1][2]
+
+                #print (self.axes)
+                #print (self.axes_default)
+                if(self.axes!=self.axes_default):
+                    vel_msg.linear.x = self.axes[4]
+                    vel_msg.linear.y = self.axes[3]
+                    vel_msg.linear.z = self.axes[1]
+                    vel_msg.angular.z = self.axes[2]
+                    #Velocidade drone2
+                    vel_msg2.linear.x = self.axes[4]
+                    vel_msg2.linear.y = self.axes[3]
+                    vel_msg2.linear.z = self.axes[1]
+                    vel_msg2.angular.z = self.axes[2]
+                    print ("Do joystick")            
+
                 if not self.rospy.is_shutdown():                
                     self.pubVel.publish(vel_msg)
                     self.pubVel2.publish(vel_msg2)
                 t_control = self.rospy.get_time()
                 t_incB = self.rospy.get_time()                
-                i = i + 1        
+                i = i + 1
+            if (self.landButton==1):
+                break
         
         self.rospy.loginfo("Formacao finalizada.")        
         self.land(self.bebop1_name)
