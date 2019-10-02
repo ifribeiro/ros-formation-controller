@@ -66,7 +66,7 @@ class Controller:
         self.Xd = np.transpose([[2, 1, 1.5, 0]])   
                       
         self.ti = 0.2
-        self.tfinal = 20
+        self.tfinal = 30
         self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
@@ -370,7 +370,7 @@ class Controller:
         self.rospy.loginfo("Iniciando a formacao...")
         self.rospy.sleep(2)
 
-        T_MAX = 60
+        T_MAX = self.tfinal
         T_CONTROL = 0.2
         t = self.rospy.get_time()
         t_incB = self.rospy.get_time()
@@ -447,41 +447,40 @@ class Controller:
         fig_beta = plt.figure(6)
 
         ax_x = fig_x.add_subplot(111)
-        ax_x.plot(self.t[:i], self.errox[:], label="Erro X", color="red")
-        ax_x.set_title("Erros de posicionamento")
-        ax_x.set_xlabel("Tempo de execução (s)")
-        ax_x.set_xlabel("Tempo de execução (s)")
+        ax_x.plot(self.t[:i], self.errox[:], color="red")
+        ax_x.set_title("Erro de posição: x")
+        ax_x.set_xlabel("Tempo (s)")
         ax_x.set_ylabel("Erro (m)")
 
         ax_y = fig_y.add_subplot(111)
         ax_y.plot(self.t[:i], self.erroy[:], color="orange")
-        ax_y.set_title("Erros de posicionamento y")
-        ax_y.set_xlabel("Tempo de execução (s)")
+        ax_y.set_title("Erro de posição: y")
+        ax_y.set_xlabel("Tempo (s)")
         ax_y.set_ylabel("Erro (m)")
 
 
         ax_z = fig_z.add_subplot(111)
         ax_z.plot(self.t[:i], self.erroz[:], color="green")
-        ax_z.set_title("Erros de posicionamento z")
-        ax_z.set_xlabel("Tempo de execução (s)")
+        ax_z.set_title("Erro de posição: z")
+        ax_z.set_xlabel("Tempo (s)")
         ax_z.set_ylabel("Erro (m)")
 
         ax_rho = fig_rho.add_subplot(111)
         ax_rho.plot(self.t[:i], self.errorhof[:], color="magenta")
-        ax_rho.set_title("Erros de posicionamento rho")
-        ax_rho.set_xlabel("Tempo de execução (s)")
+        ax_rho.set_title("Erro de formação: rho")
+        ax_rho.set_xlabel("Tempo (s)")
         ax_rho.set_ylabel("Erro (m)")
 
         ax_alpha = fig_alpha.add_subplot(111)
         ax_alpha.plot(self.t[:i], self.erroalphaf[:], color="sandybrown")
-        ax_alpha.set_title("Erros de posicionamento alpha")
-        ax_alpha.set_xlabel("Tempo de execução (s)")
+        ax_alpha.set_title("Erro de formação: alpha")
+        ax_alpha.set_xlabel("Tempo (s)")
         ax_alpha.set_ylabel("Erro (m)")
 
         ax_beta = fig_beta.add_subplot(111)
         ax_beta.plot(self.t[:i], self.errobetaf[:], color="cyan")
-        ax_beta.set_title("Erros de posicionamento beta")
-        ax_beta.set_xlabel("Tempo de execução (s)")
+        ax_beta.set_title("Erro de formação: beta")
+        ax_beta.set_xlabel("Tempo (s)")
         ax_beta.set_ylabel("Erro (m)")
         plt.legend()
         plt.show()
