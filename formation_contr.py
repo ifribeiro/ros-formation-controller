@@ -136,9 +136,9 @@ class Controller:
         #initial position Drone2
         self.Vd1A = np.transpose([0, 0, 0, 0])
         self.Vd2A = np.transpose([0, 0, 0, 0])
-        self.axes = [-0.0, 0.0, 1.0, -0.0, -0.0, 1.0, 0.0, 0.0]
-        self.axes_default = [-0.0, 0.0, 1.0, -0.0, -0.0, 1.0, 0.0, 0.0]
-        self.landButton = 0
+        self.axes = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.axes_default = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.landButton = 0        
 
     def get_drone1_odom(self, msg):
 
@@ -173,9 +173,9 @@ class Controller:
         return
 
 
-    def updateJoyParams(self, msg):
+    def updateJoyParams(self, msg):    
         self.axes[:] = msg.axes[:]
-        self.landButton = msg.buttons[0]           
+        self.landButton = msg.buttons[0]
         return         
 
     def get_drone2_odom(self,msg):
@@ -385,29 +385,29 @@ class Controller:
                 U = self.controleFormacao(j=i, t=t_incB, odom_drone1=self.odom_drone1, odom_drone2=self.odom_drone2)
 
                 #Velocidade drone1
-                vel_msg.linear.x = U[0][0]
-                vel_msg.linear.y = U[0][1]
-                vel_msg.linear.z = U[0][2]
+                vel_msg.linear.x = 0.0
+                vel_msg.linear.y = 0.0
+                vel_msg.linear.z = 0.0
 
                 #Velocidade drone2
-                vel_msg2.linear.x = U[1][0]
-                vel_msg2.linear.y = U[1][1]
-                vel_msg2.linear.z = U[1][2]
+                vel_msg2.linear.x = 0.0
+                vel_msg2.linear.y = 0.0
+                vel_msg2.linear.z = 0.0
 
                 #print (self.axes)
                 #print (self.axes_default)
-                if(self.axes!=self.axes_default):
+                if(sum(self.axes)!=0):
                     vel_msg.linear.x = self.axes[4]
                     vel_msg.linear.y = self.axes[3]
                     vel_msg.linear.z = self.axes[1]
-                    vel_msg.angular.z = self.axes[2]
+                    vel_msg.angular.z = 0
                     #Velocidade drone2
                     vel_msg2.linear.x = self.axes[4]
                     vel_msg2.linear.y = self.axes[3]
                     vel_msg2.linear.z = self.axes[1]
-                    vel_msg2.angular.z = self.axes[2]
-                    print ("Do joystick")            
-
+                    vel_msg2.angular.z = 0
+                    print ("Do joystick")
+                    self.joystick = False
                 if not self.rospy.is_shutdown():                
                     self.pubVel.publish(vel_msg)
                     self.pubVel2.publish(vel_msg2)
@@ -481,8 +481,7 @@ class Controller:
         ax_beta.plot(self.t[:i], self.errobetaf[:], color="cyan")
         ax_beta.set_title("Erro de formação: beta")
         ax_beta.set_xlabel("Tempo (s)")
-        ax_beta.set_ylabel("Erro (m)")
-        plt.legend()
+        ax_beta.set_ylabel("Erro (m)")        
         plt.show()
                 
     
