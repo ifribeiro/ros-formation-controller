@@ -38,6 +38,7 @@ ax[1].set_title("Erros de formação")
 ax[1].set_xlabel("Tempo de execução (s)")
 ax[1].set_ylabel("Erro (m)")
 
+
 fig_x = plt.figure(1)
 fig_y = plt.figure(2)
 fig_z = plt.figure(3)
@@ -86,6 +87,5 @@ ax_beta.set_ylabel("Erro (m)")
 
 print (np.std(erros_beta))
 
-fig.legend()
 
 plt.show()

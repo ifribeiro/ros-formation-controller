@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import message_filters
 import numpy as np
+import datetime
 import rospy
 import time
 import math
@@ -66,7 +67,7 @@ class Controller:
         self.Xd = np.transpose([[2, 1, 1.5, 0]])   
                       
         self.ti = 0.2
-        self.tfinal = 30
+        self.tfinal = 40
         self.t = np.arange(0, self.tfinal, self.ti)
 
         #Formação desejada
@@ -385,17 +386,17 @@ class Controller:
                 U = self.controleFormacao(j=i, t=t_incB, odom_drone1=self.odom_drone1, odom_drone2=self.odom_drone2)
 
                 #Velocidade drone1
-                vel_msg.linear.x = 0.0
-                vel_msg.linear.y = 0.0
-                vel_msg.linear.z = 0.0
+                vel_msg.linear.x = U[0][0]
+                vel_msg.linear.y = U[0][1]
+                vel_msg.linear.z = U[0][2]
 
                 #Velocidade drone2
-                vel_msg2.linear.x = 0.0
-                vel_msg2.linear.y = 0.0
-                vel_msg2.linear.z = 0.0
+                vel_msg2.linear.x = U[1][0]
+                vel_msg2.linear.y = U[1][1]
+                vel_msg2.linear.z = U[1][2]
 
                 #print (self.axes)
-                #print (self.axes_default)
+                print (sum(self.axes))
                 if(sum(self.axes)!=0):
                     vel_msg.linear.x = self.axes[4]
                     vel_msg.linear.y = self.axes[3]
@@ -416,7 +417,15 @@ class Controller:
                 i = i + 1
             if (self.landButton==1):
                 break
-        
+        now = datetime.datetime.today()
+        file_erros = open("Erros"+ str(now.hour)+"-"+str(now.minute) +".csv", "wb")
+        file_erros.write("X,Y,Z,Rho,Beta,Alpha\n")
+        for x,y,z,rho,beta,alpha in zip(self.errox, self.erroy, self.erroz, self.errorhof, self.errobetaf, self.erroalphaf):
+            line_erro = str(x)+","+str(y)+","+str(z)+","+str(rho)+","+str(beta)+","+str(alpha)+"\n"  
+            file_erros.write(line_erro)
+        file_erros.close()
+
+
         self.rospy.loginfo("Formacao finalizada.")        
         self.land(self.bebop1_name)
         self.land(self.bebop2_name)
