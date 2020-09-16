@@ -1,5 +1,8 @@
 #! /usr/bin/env python2
 # -*- coding: utf-8 -*-
+"""
+@author: Iran Ribeiro (@ifribeiro)
+"""
 from __future__ import unicode_literals
 from mpl_toolkits.mplot3d import Axes3D
 from geometry_msgs.msg import Twist
