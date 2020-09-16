@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/ifribeiro/ros-formation-controller/blob/master/python_ros.svg" >
+<p>
+
 # ros-formation-controller
 Formation controller of two drones (Bebop2) implemented in Python with the [ROS](https://www.ros.org/) framework.
 
