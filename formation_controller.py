@@ -43,7 +43,7 @@ class Controller:
 
     def initPublishers(self, bebop1_name, bebop2_name):
         """    
-        Inicia os Publishers onde serão publicas mensagens 
+        Inicia os Publishers onde as mensagens serão publicadas
 
         Parâmetros: 
         bebop1_name, bebop2_name = nomes dos drones da formação definidos
@@ -61,7 +61,7 @@ class Controller:
 
     def initvariables(self):
         """
-        Inicia as várias que serão utilizadas no código
+        Inicia as variáveis que serão utilizadas no código
         """
 
         self.bebop1_name = 'B1'
